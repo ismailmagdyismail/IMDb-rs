@@ -1,4 +1,7 @@
-use std::env;
+use std::{
+    env,
+    io::{BufRead, Write},
+};
 
 const USAGE_MESSAGE: &'static str = "
 run      >  imdb      [Imdb_FILE_PATH] repl|deamon
@@ -80,6 +83,40 @@ fn load(db_file_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn command_parser(command: &String) -> Result<(), String> {
+    let command_entries: Vec<&str> = command.split(' ').collect();
+    let command_name = command_entries[0];
+    let normalized_command_name = command_name.to_lowercase();
+    let normalized_command_name = normalized_command_name.trim();
+    match normalized_command_name {
+        "get" => Ok(()),
+        "insert" => Ok(()),
+        "delete" => Ok(()),
+        _ => {
+            return Result::Err(error_message_formatter(
+                "[Imdb Invalid Command name]".to_string(),
+            ));
+        }
+    }
+}
+
+fn run_repl() {
+    loop {
+        let mut stdout = std::io::stdout();
+        stdout.write_all("Command > ".as_bytes()).unwrap();
+        stdout.flush().unwrap();
+
+        let stdin = std::io::stdin().lock();
+        for line in stdin.lines() {
+            let line = line.unwrap();
+            if let Result::Err(error) = command_parser(&line) {
+                println!("{}", error);
+            }
+            break;
+        }
+    }
+}
+
 fn run_db(args: Vec<String>) -> Result<(), String> {
     let (imdb_config, imdb_operation) = ImdbCliArgsParser::parse(args)?;
     dbg!(&imdb_config);
@@ -87,7 +124,7 @@ fn run_db(args: Vec<String>) -> Result<(), String> {
 
     match imdb_operation {
         ImdbOperation::Deamon => todo!("[Imdb:: Server|Deamon Mode Not Supported Yet!!]"),
-        ImdbOperation::Repl => println!("pingooooo!!"),
+        ImdbOperation::Repl => run_repl(),
     }
 
     // load(file_path)?;
