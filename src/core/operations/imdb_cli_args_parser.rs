@@ -1,5 +1,6 @@
 use crate::core::{
-    imdb_config::ImdbConfig, imdb_errors::error_message_formatter, imdb_opeartion::ImdbOperation,
+    imdb_config::ImdbConfig, imdb_errors::error_message_formatter,
+    operations::imdb_operation::ImdbOperation,
 };
 
 pub struct ImdbCliArgsParser {}

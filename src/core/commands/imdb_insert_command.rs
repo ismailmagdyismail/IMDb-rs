@@ -1,4 +1,6 @@
-use crate::core::{imdb::Imdb, imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord};
+use crate::core::{
+    imdb::Imdb, imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+};
 
 pub struct ImdbInsertCommand<'a> {
     imdb: &'a mut Imdb,
@@ -38,7 +40,7 @@ impl ImdbInsertCommandArgs {
 
 #[cfg(test)]
 mod test {
-    use crate::core::imdb_insert_command::ImdbInsertCommandArgs;
+    use crate::core::commands::imdb_insert_command::ImdbInsertCommandArgs;
 
     #[test]
     fn test_command_args_parsing() {

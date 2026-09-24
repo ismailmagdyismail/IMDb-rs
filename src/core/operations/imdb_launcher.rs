@@ -1,6 +1,7 @@
 use crate::core::{
-    imdb::Imdb, imdb_cli_args_parser::ImdbCliArgsParser, imdb_opeartion::ImdbOperation,
-    imdb_repl::ImdbRepl,
+    imdb::Imdb,
+    operations::{imdb_cli_args_parser::ImdbCliArgsParser, imdb_operation::ImdbOperation},
+    repl::imdb_repl::ImdbRepl,
 };
 
 pub fn launch_imdb(args: Vec<String>) -> Result<(), String> {

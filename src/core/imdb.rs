@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::core::{
+use crate::core::commands::{
     imdb_commands::ImdbCommand,
     imdb_get_command::{ImdbGetCommand, ImdbGetCommandArgs},
     imdb_insert_command::{ImdbInsertCommand, ImdbInsertCommandArgs},

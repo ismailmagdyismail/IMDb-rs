@@ -34,7 +34,7 @@ impl ImdbCommand {
 
 #[cfg(test)]
 mod test {
-    use crate::core::imdb_commands::ImdbCommand;
+    use crate::core::commands::imdb_commands::ImdbCommand;
 
     #[test]
     fn test_command_type() {
