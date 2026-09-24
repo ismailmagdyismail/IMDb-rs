@@ -6,7 +6,7 @@ pub struct ImdbCliArgsParser {}
 
 impl ImdbCliArgsParser {
     pub fn parse(args: Vec<String>) -> Result<(ImdbConfig, ImdbOperation), String> {
-        if args.len() < 2 {
+        if args.len() < 3 {
             return Result::Err(error_message_formatter("[Imdb Invalid Args]".to_string()));
         }
 
