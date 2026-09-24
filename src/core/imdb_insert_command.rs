@@ -1,4 +1,4 @@
-use crate::core::{imdb::Imdb, imdb_errors::error_message_formatter};
+use crate::core::{imdb::Imdb, imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord};
 
 pub struct ImdbInsertCommand<'a> {
     imdb: &'a mut Imdb,
@@ -12,13 +12,12 @@ impl<'a> ImdbInsertCommand<'a> {
     pub fn execute_command(&mut self, insert_args: ImdbInsertCommandArgs) {
         self.imdb
             .kv_store
-            .insert(insert_args.key, insert_args.value);
+            .insert(insert_args.record.key, insert_args.record.value);
     }
 }
 
 pub struct ImdbInsertCommandArgs {
-    key: String,
-    value: String,
+    record: ImdbRecord,
 }
 
 impl ImdbInsertCommandArgs {
@@ -32,19 +31,20 @@ impl ImdbInsertCommandArgs {
         }
         let key = command_args[0].to_owned();
         let value = command_args[1].to_owned();
-        Ok(ImdbInsertCommandArgs { key, value })
+        let record = ImdbRecord { key, value };
+        Ok(ImdbInsertCommandArgs { record })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::core::imdb_insert_command::ImdbInsertCommand;
+    use crate::core::imdb_insert_command::ImdbInsertCommandArgs;
 
     #[test]
     fn test_command_args_parsing() {
         let args = vec!["key", "value"];
-        let args = ImdbInsertCommand::parse(args).unwrap();
-        assert_eq!(args.key, "key");
-        assert_eq!(args.value, "value");
+        let args = ImdbInsertCommandArgs::parse(args).unwrap();
+        assert_eq!(args.record.key, "key");
+        assert_eq!(args.record.value, "value");
     }
 }
