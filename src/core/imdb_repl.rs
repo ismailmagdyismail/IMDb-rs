@@ -25,8 +25,10 @@ impl ImdbRepl {
                     Err(error_message) => {
                         eprintln!("{}", error_message);
                     }
-                    Ok(_) => {
-                        println!("Command Executed Successfully!")
+                    Ok(res) => {
+                        if let Some(value) = res {
+                            println!("{}", value);
+                        }
                     }
                 }
                 break;

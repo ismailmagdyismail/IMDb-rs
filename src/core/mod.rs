@@ -8,3 +8,4 @@ pub mod imdb_opeartion;
 pub mod imdb_repl;
 pub mod imdb;
 pub mod imdb_insert_command;
+pub mod imdb_get_command;
