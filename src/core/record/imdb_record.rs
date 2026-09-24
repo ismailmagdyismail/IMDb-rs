@@ -3,8 +3,8 @@ pub struct ImdbRecord {
     pub value: String,
 }
 
-// pub struct ImdbRecordMetaData {
-//     pub check_sum: u32,
-//     pub key_len: u32,
-//     pub val_len: u32,
-// }
+pub struct ImdbRecordMetaData {
+    pub check_sum: u32,
+    pub key_len: u32,
+    pub val_len: u32,
+}
