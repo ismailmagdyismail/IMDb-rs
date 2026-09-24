@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::core::{imdb_commands::ImdbCommand, imdb_insert_command::ImdbInsertCommand};
+use crate::core::{
+    imdb_commands::ImdbCommand,
+    imdb_insert_command::{ImdbInsertCommand, ImdbInsertCommandArgs},
+};
 
 pub struct Imdb {
     pub kv_store: HashMap<String, String>,
@@ -24,7 +27,7 @@ impl Imdb {
     }
 
     fn handle_insert_command(&mut self, args: Vec<&str>) -> Result<(), String> {
-        let insert_command_args = ImdbInsertCommand::parse(args)?;
+        let insert_command_args = ImdbInsertCommandArgs::parse(args)?;
         let mut insert_command = ImdbInsertCommand::new(self);
         insert_command.execute_command(insert_command_args);
         Ok(())

@@ -4,11 +4,6 @@ pub struct ImdbInsertCommand<'a> {
     imdb: &'a mut Imdb,
 }
 
-pub struct ImdbInsertCommandArgs {
-    key: String,
-    value: String,
-}
-
 impl<'a> ImdbInsertCommand<'a> {
     pub fn new(imdb: &'a mut Imdb) -> ImdbInsertCommand<'a> {
         ImdbInsertCommand { imdb }
@@ -21,8 +16,13 @@ impl<'a> ImdbInsertCommand<'a> {
     }
 }
 
-impl<'a> ImdbInsertCommand<'a> {
-    pub fn parse(command_args: Vec<&'a str>) -> Result<ImdbInsertCommandArgs, String> {
+pub struct ImdbInsertCommandArgs {
+    key: String,
+    value: String,
+}
+
+impl ImdbInsertCommandArgs {
+    pub fn parse(command_args: Vec<&str>) -> Result<ImdbInsertCommandArgs, String> {
         if command_args.len() != 2 {
             let error_message = format!(
                 "[Imdb Insert Command Invalid args, expected 2, found {}]",
