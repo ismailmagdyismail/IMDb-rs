@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct ImdbConfig {
-    db_path: String,
+    pub db_path: String,
 }
 
 impl ImdbConfig {

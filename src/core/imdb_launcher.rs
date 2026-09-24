@@ -1,5 +1,6 @@
 use crate::core::{
-    imdb_cli_args_parser::ImdbCliArgsParser, imdb_opeartion::ImdbOperation, imdb_repl::ImdbRepl,
+    imdb::Imdb, imdb_cli_args_parser::ImdbCliArgsParser, imdb_opeartion::ImdbOperation,
+    imdb_repl::ImdbRepl,
 };
 
 pub fn launch_imdb(args: Vec<String>) -> Result<(), String> {
@@ -10,7 +11,7 @@ pub fn launch_imdb(args: Vec<String>) -> Result<(), String> {
     match imdb_operation {
         ImdbOperation::Deamon => todo!("[Imdb:: Server|Deamon Mode Not Supported Yet!!]"),
         ImdbOperation::Repl => {
-            let repl: ImdbRepl = ImdbRepl {};
+            let mut repl: ImdbRepl = ImdbRepl::new(Imdb::new());
             repl.run();
         }
     }

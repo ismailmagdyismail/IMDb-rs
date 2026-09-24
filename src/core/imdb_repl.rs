@@ -1,11 +1,17 @@
 use std::io::{BufRead, Write};
 
-use crate::core::imdb_commands::ImdbCommand;
+use crate::core::imdb::Imdb;
 
-pub struct ImdbRepl {}
+pub struct ImdbRepl {
+    imdb: Imdb,
+}
 
 impl ImdbRepl {
-    pub fn run(&self) {
+    pub fn new(imdb: Imdb) -> ImdbRepl {
+        ImdbRepl { imdb }
+    }
+
+    pub fn run(&mut self) {
         loop {
             let mut stdout = std::io::stdout();
             stdout.write_all("Command > ".as_bytes()).unwrap();
@@ -14,8 +20,14 @@ impl ImdbRepl {
             let stdin = std::io::stdin().lock();
             for line in stdin.lines() {
                 let line = line.unwrap();
-                if let Result::Err(error) = ImdbCommand::parse(&line) {
-                    println!("{}", error);
+                let operation_result = self.imdb.execute_command(line);
+                match operation_result {
+                    Err(error_message) => {
+                        eprintln!("{}", error_message);
+                    }
+                    Ok(_) => {
+                        println!("Command Executed Successfully!")
+                    }
                 }
                 break;
             }

@@ -6,3 +6,5 @@ pub mod imdb_launcher;
 pub mod imdb_messages;
 pub mod imdb_opeartion;
 pub mod imdb_repl;
+pub mod imdb;
+pub mod imdb_insert_command;
