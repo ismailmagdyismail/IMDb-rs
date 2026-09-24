@@ -2,5 +2,10 @@
 name = "imdb"
 version = "0.1.0"
 edition = "2024"
+default-run="imdb"
 
 [dependencies]
+
+[[bin]]
+name = "exp"
+path = "src/experiments/exp.rs"
