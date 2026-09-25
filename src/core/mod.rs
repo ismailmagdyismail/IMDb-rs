@@ -6,3 +6,4 @@ pub mod record;
 pub mod operations;
 pub mod commands;
 pub mod repl;
+pub mod serdes;

@@ -1,58 +1,46 @@
-use crate::core::record::imdb_record::{ImdbRecord, ImdbRecordMetaData};
+use crate::core::{
+    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+    serdes::serdes::{Deserilizer, Serializer},
+};
 
 impl ImdbRecord {
     pub fn ser_size(&self) -> u32 {
         return self.key.len() as u32 + self.value.len() as u32;
     }
 
-    pub fn serialize(&self, buffer: &mut Vec<u8>) -> Result<u32, String> {
+    pub fn serialize(&self, sink_buffer: &mut Vec<u8>) -> Result<u32, String> {
         let required_size = self.ser_size();
-        if (buffer.len() as u32) < required_size {
+        if (sink_buffer.len() as u32) < required_size {
             return Result::Err("[Buffer for serialization is too small]".to_string());
         }
 
-        let key_len: usize = self.key.len();
-        let key_offset = 0;
-        let key_end: usize = key_offset + key_len;
-        let dest_key_buffer_bytes = &mut buffer[key_offset..key_end];
-        dest_key_buffer_bytes.copy_from_slice(self.key.as_slice());
+        let mut serializer = Serializer::new(sink_buffer);
+        serializer.serialize(&self.key).serialize(&self.value);
 
-        let value_offset = key_end;
-        let value_len = self.value.len();
-        let value_end = value_offset + value_len;
-        let dest_value_buffer_bytes = &mut buffer[value_offset..value_end];
-        dest_value_buffer_bytes.copy_from_slice(self.value.as_slice());
+        debug_assert!(self.ser_size() == serializer.size());
 
-        Result::Ok(key_len as u32 + value_len as u32)
+        Result::Ok(serializer.size())
     }
 }
 
 impl ImdbRecord {
     pub fn deserialize_copy(
         meta_data: &ImdbRecordMetaData,
-        buffer: &Vec<u8>,
+        src_buffer: &Vec<u8>,
     ) -> Result<(ImdbRecord, u32), String> {
-        if meta_data.key_len + meta_data.val_len > buffer.len() as u32 {
+        if meta_data.key_len + meta_data.val_len > src_buffer.len() as u32 {
             return Result::Err("[Buffer for derserilization is too small]".to_string());
         }
-        let key_offset = 0 as usize;
-        let key_size = meta_data.key_len as usize;
-        let key_end = key_offset + key_size;
-        let src_key_slice = &buffer[key_offset..key_end];
-        let deserialized_key = Vec::from(src_key_slice);
-
-        let value_offset = key_end as usize;
-        let value_size = meta_data.val_len as usize;
-        let value_end = value_offset + value_size as usize;
-        let src_value_slice = &buffer[value_offset..value_end];
-        let deserialized_value = Vec::from(src_value_slice);
+        let mut deserializer = Deserilizer::new(&src_buffer);
+        let key_sink_buffer = deserializer.deserialize_copy(meta_data.key_len);
+        let value_sink_buffer = deserializer.deserialize_copy(meta_data.val_len);
 
         let record = ImdbRecord {
-            key: deserialized_key,
-            value: deserialized_value,
+            key: key_sink_buffer,
+            value: value_sink_buffer,
         };
 
-        Ok((record, (key_size + value_size) as u32))
+        Ok((record, deserializer.size()))
     }
 
     // for zero copy deserialization, should either
