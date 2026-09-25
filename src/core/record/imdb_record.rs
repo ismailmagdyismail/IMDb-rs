@@ -1,6 +1,9 @@
+pub type ImdbRecordKey = Vec<u8>;
+pub type ImdbRecordValue = Vec<u8>;
+
 pub struct ImdbRecord {
-    pub key: String,
-    pub value: String,
+    pub key: ImdbRecordKey,
+    pub value: ImdbRecordValue,
 }
 
 pub struct ImdbRecordMetaData {

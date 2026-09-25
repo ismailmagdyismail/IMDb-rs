@@ -9,17 +9,18 @@ impl<'a> ImdbGetCommand<'a> {
         ImdbGetCommand { imdb }
     }
 
-    pub fn execute_command(&self, command_args: ImdbGetCommandArgs) -> Option<&'a String> {
-        self.imdb.kv_store.get(command_args.key)
+    pub fn execute_command(&self, command_args: ImdbGetCommandArgs) -> Option<&'a Vec<u8>> {
+        let value = self.imdb.kv_store.get(command_args.key);
+        return value;
     }
 }
 
 pub struct ImdbGetCommandArgs<'a> {
-    key: &'a str,
+    key: &'a [u8],
 }
 
 impl<'a> ImdbGetCommandArgs<'a> {
-    pub fn parse(args: Vec<&'a str>) -> Result<ImdbGetCommandArgs<'a>, String> {
+    pub fn parse(args: Vec<&'a [u8]>) -> Result<ImdbGetCommandArgs<'a>, String> {
         if args.len() != 1 {
             return Result::Err(error_message_formatter(
                 "[Imdb Get Command invalid args]".to_string(),

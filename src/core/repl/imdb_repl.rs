@@ -19,7 +19,7 @@ impl ImdbRepl {
 
             let stdin = std::io::stdin().lock();
             for line in stdin.lines() {
-                let line = line.unwrap();
+                let line = line.unwrap().into_bytes();
                 let operation_result = self.imdb.execute_command(line);
                 match operation_result {
                     Err(error_message) => {
@@ -27,7 +27,7 @@ impl ImdbRepl {
                     }
                     Ok(res) => {
                         if let Some(value) = res {
-                            println!("{}", value);
+                            println!("{}", String::from_utf8_lossy(value).to_string());
                         }
                     }
                 }

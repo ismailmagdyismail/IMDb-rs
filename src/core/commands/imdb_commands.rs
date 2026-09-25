@@ -8,8 +8,8 @@ pub enum ImdbCommand {
 }
 
 impl ImdbCommand {
-    pub fn parse(command: &String) -> Result<(ImdbCommand, Vec<&str>), String> {
-        let mut command_entries: Vec<&str> = command.split(' ').collect();
+    pub fn parse(command: &Vec<u8>) -> Result<(ImdbCommand, &[u8], Vec<&[u8]>), String> {
+        let mut command_entries: Vec<&[u8]> = command.split(|byte| *byte == b' ').collect();
         if command_entries.is_empty() {
             return Result::Err(error_message_formatter(
                 "[Imdb Ivalid Command -- empty command]".to_string(),
@@ -17,12 +17,12 @@ impl ImdbCommand {
         }
         let args = command_entries.split_off(1);
         let command_name = command_entries[0];
-        let normalized_command_name = command_name.to_lowercase();
-        let normalized_command_name = normalized_command_name.trim();
+        let normalized_command_name = command_name.trim_ascii().to_ascii_lowercase();
+        let normalized_command_name = normalized_command_name.as_slice();
         match normalized_command_name {
-            "get" => Ok((ImdbCommand::Get, args)),
-            "insert" => Ok((ImdbCommand::Insert, args)),
-            "delete" => Ok((ImdbCommand::Delete, args)),
+            b"get" => Ok((ImdbCommand::Get, command_name, args)),
+            b"insert" => Ok((ImdbCommand::Insert, command_name, args)),
+            b"delete" => Ok((ImdbCommand::Delete, command_name, args)),
             _ => {
                 return Result::Err(error_message_formatter(
                     "[Imdb Invalid Command name]".to_string(),
@@ -38,9 +38,9 @@ mod test {
 
     #[test]
     fn test_command_type() {
-        let (get, _) = ImdbCommand::parse(&"get".to_string()).unwrap();
-        let (insert, _) = ImdbCommand::parse(&"insert".to_string()).unwrap();
-        let (delete, _) = ImdbCommand::parse(&"delete".to_string()).unwrap();
+        let (get, _, _) = ImdbCommand::parse(&"get".to_string().into_bytes()).unwrap();
+        let (insert, _, _) = ImdbCommand::parse(&"insert".to_string().into_bytes()).unwrap();
+        let (delete, _, _) = ImdbCommand::parse(&"delete".to_string().into_bytes()).unwrap();
 
         assert_eq!(get, ImdbCommand::Get);
         assert_eq!(insert, ImdbCommand::Insert);
@@ -49,9 +49,9 @@ mod test {
 
     #[test]
     fn test_case_insensitve_command() {
-        let (get, _) = ImdbCommand::parse(&"Get".to_string()).unwrap();
-        let (insert, _) = ImdbCommand::parse(&"INSERT".to_string()).unwrap();
-        let (delete, _) = ImdbCommand::parse(&"DelETe".to_string()).unwrap();
+        let (get, _, _) = ImdbCommand::parse(&"Get".to_string().into_bytes()).unwrap();
+        let (insert, _, _) = ImdbCommand::parse(&"INSERT".to_string().into_bytes()).unwrap();
+        let (delete, _, _) = ImdbCommand::parse(&"DelETe".to_string().into_bytes()).unwrap();
 
         assert_eq!(get, ImdbCommand::Get);
         assert_eq!(insert, ImdbCommand::Insert);
@@ -60,13 +60,13 @@ mod test {
 
     #[test]
     fn test_args_split() {
-        let command = "Get".to_string();
-        let (get, args) = ImdbCommand::parse(&command).unwrap();
+        let command = "Get".to_string().into_bytes();
+        let (get, _, args) = ImdbCommand::parse(&command).unwrap();
         assert_eq!(get, ImdbCommand::Get);
         assert_eq!(args.len(), 0);
 
-        let command = "Insert key value".to_string();
-        let (get, args) = ImdbCommand::parse(&command).unwrap();
+        let command = "Insert key value".to_string().into_bytes();
+        let (get, _, args) = ImdbCommand::parse(&command).unwrap();
         assert_eq!(get, ImdbCommand::Insert);
         assert_eq!(args.len(), 2);
     }

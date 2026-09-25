@@ -15,13 +15,13 @@ impl ImdbRecord {
         let key_offset = 0;
         let key_end: usize = key_offset + key_len;
         let dest_key_buffer_bytes = &mut buffer[key_offset..key_end];
-        dest_key_buffer_bytes.copy_from_slice(self.key.as_bytes());
+        dest_key_buffer_bytes.copy_from_slice(self.key.as_slice());
 
         let value_offset = key_end;
         let value_len = self.value.len();
         let value_end = value_offset + value_len;
         let dest_value_buffer_bytes = &mut buffer[value_offset..value_end];
-        dest_value_buffer_bytes.copy_from_slice(self.value.as_bytes());
+        dest_value_buffer_bytes.copy_from_slice(self.value.as_slice());
 
         Result::Ok(key_len as u32 + value_len as u32)
     }
@@ -39,13 +39,13 @@ impl ImdbRecord {
         let key_size = meta_data.key_len as usize;
         let key_end = key_offset + key_size;
         let src_key_slice = &buffer[key_offset..key_end];
-        let deserialized_key = String::from_utf8_lossy(src_key_slice).to_string();
+        let deserialized_key = Vec::from(src_key_slice);
 
         let value_offset = key_end as usize;
         let value_size = meta_data.val_len as usize;
         let value_end = value_offset + value_size as usize;
         let src_value_slice = &buffer[value_offset..value_end];
-        let deserialized_value = String::from_utf8_lossy(src_value_slice).to_string();
+        let deserialized_value = Vec::from(src_value_slice);
 
         let record = ImdbRecord {
             key: deserialized_key,
@@ -68,8 +68,8 @@ mod test {
     #[test]
     fn test_size_required() {
         let record = ImdbRecord {
-            key: "1".to_string(),
-            value: "ismail".to_string(),
+            key: "1".as_bytes().to_vec(),
+            value: "ismail".as_bytes().to_vec(),
         };
         let required_size = record.ser_size();
         assert_eq!(required_size, 7);
@@ -82,8 +82,8 @@ mod test {
     #[test]
     fn test_written_bytes() {
         let record = ImdbRecord {
-            key: "1".to_string(),
-            value: "ismail".to_string(),
+            key: "1".as_bytes().to_vec(),
+            value: "ismail".as_bytes().to_vec(),
         };
         let required_size = record.ser_size();
         assert_eq!(required_size, 7);
@@ -100,8 +100,8 @@ mod test {
 
     #[test]
     fn test_deserialization() {
-        let key = "1".to_string();
-        let value = "ismail".to_string();
+        let key = "1".as_bytes().to_vec();
+        let value = "ismail".as_bytes().to_vec();
         let key_len = key.len();
         let value_len = value.len();
         let record = ImdbRecord { key, value };

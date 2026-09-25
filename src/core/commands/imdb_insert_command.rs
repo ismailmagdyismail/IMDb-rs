@@ -23,7 +23,7 @@ pub struct ImdbInsertCommandArgs {
 }
 
 impl ImdbInsertCommandArgs {
-    pub fn parse(command_args: Vec<&str>) -> Result<ImdbInsertCommandArgs, String> {
+    pub fn parse(command_args: Vec<&[u8]>) -> Result<ImdbInsertCommandArgs, String> {
         if command_args.len() != 2 {
             let error_message = format!(
                 "[Imdb Insert Command Invalid args, expected 2, found {}]",
@@ -44,9 +44,9 @@ mod test {
 
     #[test]
     fn test_command_args_parsing() {
-        let args = vec!["key", "value"];
-        let args = ImdbInsertCommandArgs::parse(args).unwrap();
-        assert_eq!(args.record.key, "key");
-        assert_eq!(args.record.value, "value");
+        let args = vec!["key".as_bytes(), "value".as_bytes()];
+        let parsed_args = ImdbInsertCommandArgs::parse(args).unwrap();
+        assert_eq!(parsed_args.record.key, "key".as_bytes());
+        assert_eq!(parsed_args.record.value, "value".as_bytes());
     }
 }
