@@ -14,15 +14,33 @@ use crate::core::{
     serdes::slicer::Slicer,
 };
 
-pub fn decode_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord), String> {
+pub fn decode_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord, u32), String> {
+    let mut required_buffer_size = HEADER_SIZE;
+    if buffer.len() < required_buffer_size as usize {
+        let error = format!(
+            "[Imdb Decode Record Error]: buffer supplied is smaller than required header size {}, {}",
+            required_buffer_size,
+            buffer.len()
+        );
+        return Result::Err(error);
+    }
     let mut slicer = Slicer::new(buffer);
     let metadata_buffer = slicer.next_slice(HEADER_SIZE);
     let (metadata, metadata_size) = ImdbRecordMetaData::deserialize_copy(metadata_buffer)?;
+    required_buffer_size += metadata.key_len + metadata.val_len;
+    if buffer.len() < required_buffer_size as usize {
+        let error = format!(
+            "[Imdb Decode Record Error]: buffer supplied is smaller than payload size {}, {}",
+            required_buffer_size,
+            buffer.len(),
+        );
+        return Result::Err(error);
+    }
     let record_buffer = slicer.next_slice(metadata.key_len + metadata.val_len);
     let (record, record_size) = ImdbRecord::deserialize_copy(&metadata, record_buffer)?;
     debug_assert!(metadata_size == HEADER_SIZE);
     debug_assert!(record_size == metadata.key_len + metadata.val_len);
-    Ok((metadata, record))
+    Ok((metadata, record, record_size + metadata_size))
 }
 
 pub fn encode_record(
@@ -30,6 +48,15 @@ pub fn encode_record(
     meta_data: &ImdbRecordMetaData,
     buffer: &mut [u8],
 ) -> Result<(), String> {
+    if buffer.len() < record.ser_size() as usize + meta_data.ser_size() as usize {
+        let error = format!(
+            "[Imdb Encode Record Error]: buffer supplied is smaller than payload size {}, {}",
+            record.ser_size() + meta_data.ser_size(),
+            buffer.len(),
+        );
+        return Result::Err(error);
+    }
+
     let mut slicer = Slicer::new(buffer);
 
     let metadata_buffer = slicer.next_slice_mut(HEADER_SIZE);
@@ -47,8 +74,8 @@ pub fn encode_record(
 #[cfg(test)]
 mod test {
     use crate::core::{
-        disk_layout::imdb_inline_metadata_format::{decode_record, encode_record},
         record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
+        storage::imdb_inline_metadata_format::{decode_record, encode_record},
     };
 
     #[test]
@@ -74,7 +101,7 @@ mod test {
         }
 
         for i in 0..100 {
-            let (decoded_metadata, decoded_record) = decode_record(&buffers[i]).unwrap();
+            let (decoded_metadata, decoded_record, _) = decode_record(&buffers[i]).unwrap();
             let actual_meta_data = &records[i].0;
             assert_eq!(decoded_metadata.key_len, actual_meta_data.key_len);
             assert_eq!(decoded_metadata.val_len, actual_meta_data.val_len);
