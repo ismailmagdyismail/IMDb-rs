@@ -7,3 +7,4 @@ pub mod operations;
 pub mod commands;
 pub mod repl;
 pub mod serdes;
+pub mod disk_layout;
