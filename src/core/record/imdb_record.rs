@@ -1,6 +1,7 @@
 pub type ImdbRecordKey = Vec<u8>;
 pub type ImdbRecordValue = Vec<u8>;
 
+#[derive(Debug)]
 pub struct ImdbRecord {
     pub key: ImdbRecordKey,
     pub value: ImdbRecordValue,
