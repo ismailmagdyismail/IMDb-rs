@@ -1,10 +1,11 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Seek},
+    io::{BufRead, BufReader, Seek, SeekFrom},
     path::Path,
 };
 
 use crate::core::storage::{
+    buffer_helpers::advance_internal_buffer_cursor,
     imdb_inline_metadata_format::decode_record,
     pager::{ImdbRecordPager, Offset, RecordMetadataStorageEntry},
 };
@@ -19,8 +20,8 @@ use crate::core::storage::{
 
 #[derive(Debug)]
 pub struct ImdbInlineMetaDataPager {
-    // data_file: File,
-    buf_reader: BufReader<File>,
+    buf_reader: BufReader<File>,               // for stateful iterative reads
+    random_access_buf_reader: BufReader<File>, // for random / non sequential reads
 }
 
 impl ImdbInlineMetaDataPager {
@@ -35,8 +36,16 @@ impl ImdbInlineMetaDataPager {
                 let formatted_errror = format!("[Imdb Opening Data file Error]: {}", error);
                 return formatted_errror;
             })?;
+
+        let stateless_read_file = file.try_clone().map_err(|error| {
+            let formatted_errror = format!("[Imdb Opening Data file Error]: {}", error);
+            return formatted_errror;
+        })?;
+        let random_access_buf_reader = BufReader::with_capacity(1024, stateless_read_file);
+
         Ok(ImdbInlineMetaDataPager {
             buf_reader: BufReader::new(file),
+            random_access_buf_reader: random_access_buf_reader,
         })
     }
 
@@ -60,19 +69,8 @@ impl ImdbInlineMetaDataPager {
         // deserialize
         let (metadata, record, metadata_size, record_size) = decode_record(buffer)?;
 
-        // record offset of metadata
-        // slide the window over by header
-        let metadata_offset = self.buf_reader.stream_position().map_err(|err| {
-            return format!("[Imdb Pager error while getting metadata offset]: {}", err);
-        })?;
-        self.buf_reader.consume(metadata_size as usize);
-
-        // record offset of record
-        // slide the window again to pass record
-        let record_offset = self.buf_reader.stream_position().map_err(|err| {
-            return format!("[Imdb Pager error while getting record offset]: {}", err);
-        })?;
-        self.buf_reader.consume(record_size as usize);
+        let (metadata_offset, record_offset) =
+            advance_internal_buffer_cursor(&mut self.buf_reader, metadata_size, record_size)?;
 
         let entry = RecordMetadataStorageEntry {
             metadata,
@@ -84,7 +82,39 @@ impl ImdbInlineMetaDataPager {
         Ok(Some(entry))
     }
 
-    pub fn read_specific_record_and_meta_data(&self) {}
+    pub fn read_specific_record_and_meta_data(
+        &mut self,
+        offset: Offset,
+    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+        self.random_access_buf_reader
+            .seek(SeekFrom::Start(offset))
+            .map_err(|err| {
+                return format!("[Imdb Random Seek failure]: {}", err);
+            })?;
+        let buffer = self.random_access_buf_reader.fill_buf().map_err(|err| {
+            return format!(
+                "[Imdb Error happend while loading record with offset {}]: {}",
+                offset, err
+            );
+        })?;
+        if buffer.is_empty() {
+            return Ok(None);
+        }
+        let (metadata, record, metadata_size, record_size) = decode_record(buffer)?;
+        let (metadata_offset, record_offset) = advance_internal_buffer_cursor(
+            &mut self.random_access_buf_reader,
+            metadata_size,
+            record_size,
+        )?;
+        let record_entry = RecordMetadataStorageEntry {
+            record,
+            metadata,
+            record_offset,
+            metadata_offset,
+            identfying_offset: metadata_offset,
+        };
+        Ok(Some(record_entry))
+    }
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
@@ -95,10 +125,10 @@ impl ImdbRecordPager for ImdbInlineMetaDataPager {
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
-        &self,
+        &mut self,
         offset: Offset,
     ) -> Result<Option<RecordMetadataStorageEntry>, String> {
-        Err("".to_string())
+        return self.read_specific_record_and_meta_data(offset);
     }
 }
 
@@ -123,13 +153,17 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
-        mocking_utils::records_paging::{verify_record, write_mock_records},
-        storage::imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+        mocking_utils::records_paging::{verify_record, write_mock_records, write_records},
+        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+        storage::{
+            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+            pager::{ImdbRecordPager, RecordMetadataStorageEntry},
+        },
     };
 
     #[test]
     pub fn test_loading_records() {
-        let file_path = Path::new("data_test.bin");
+        let file_path = Path::new("inline_metadata_pager_loading_test.bin");
         let records_count = 100;
         write_mock_records(file_path, records_count);
 
@@ -150,7 +184,7 @@ mod test {
 
     #[test]
     pub fn test_loading_iterator() {
-        let file_path = Path::new("data_test.bin");
+        let file_path = Path::new("inline_metadata_pager_iterator.bin");
         let records_count = 100;
         write_mock_records(file_path, records_count);
 
@@ -159,6 +193,114 @@ mod test {
         for (i, result) in pager.enumerate() {
             let entry = result.unwrap();
             assert!(verify_record(i, &entry.record));
+        }
+    }
+
+    pub fn find_record_offset(
+        records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
+        index: usize,
+    ) -> (u64, u64) {
+        let metadata_offset_expected = records.iter().enumerate().fold(0, |prev, (i, entry)| {
+            if i >= index {
+                return prev;
+            }
+            let (record, metadata) = entry;
+            return prev + metadata.ser_size() + record.ser_size();
+        });
+        let record_offset_expected = metadata_offset_expected + records[index].1.ser_size();
+        return (
+            metadata_offset_expected as u64,
+            record_offset_expected as u64,
+        );
+    }
+
+    pub fn verify_inline_metadata_fetched_storage_record_offsets(
+        fetched_storage_record: Option<RecordMetadataStorageEntry>,
+        original_records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
+        record_to_verify_against_index: usize,
+    ) {
+        assert!(fetched_storage_record.is_some());
+        let fetched_storage_record = fetched_storage_record.unwrap();
+        let (metadata_offset_expected, record_offset_expected) =
+            find_record_offset(original_records, record_to_verify_against_index);
+
+        assert_eq!(
+            fetched_storage_record.identfying_offset,
+            fetched_storage_record.metadata_offset
+        );
+        assert_eq!(
+            fetched_storage_record.metadata_offset,
+            metadata_offset_expected as u64
+        );
+        assert_eq!(
+            fetched_storage_record.record_offset,
+            record_offset_expected as u64
+        );
+        assert_eq!(
+            fetched_storage_record.metadata.key_len,
+            original_records[record_to_verify_against_index].1.key_len
+        );
+        assert_eq!(
+            fetched_storage_record.metadata.val_len,
+            original_records[record_to_verify_against_index].1.val_len
+        );
+        assert_eq!(
+            fetched_storage_record.record.key,
+            original_records[record_to_verify_against_index].0.key
+        );
+        assert_eq!(
+            fetched_storage_record.record.value,
+            original_records[record_to_verify_against_index].0.value
+        );
+    }
+
+    #[test]
+    pub fn test_random_read() {
+        let mut records = Vec::new();
+        records.push((
+            ImdbRecord {
+                key: "1".as_bytes().to_vec(),
+                value: "name".as_bytes().to_vec(),
+            },
+            ImdbRecordMetaData {
+                key_len: 1,
+                val_len: 4,
+                check_sum: 0,
+            },
+        ));
+        records.push((
+            ImdbRecord {
+                key: "123".as_bytes().to_vec(),
+                value: "another_name".as_bytes().to_vec(),
+            },
+            ImdbRecordMetaData {
+                key_len: 3,
+                val_len: 12,
+                check_sum: 0,
+            },
+        ));
+        records.push((
+            ImdbRecord {
+                key: "123791237981273".as_bytes().to_vec(),
+                value: "mashekjwhrkjwehrkjw".as_bytes().to_vec(),
+            },
+            ImdbRecordMetaData {
+                key_len: 15,
+                val_len: 19,
+                check_sum: 0,
+            },
+        ));
+        let path = Path::new("inline_metadata_pager_random_read.bin");
+        write_records(&records, path);
+
+        let mut pager = ImdbInlineMetaDataPager::new(&path).unwrap();
+
+        for (i, _) in records.iter().enumerate() {
+            let (metadata_offset, _) = find_record_offset(&records, i);
+            let storage_record = pager
+                .load_specific_record_and_meta_data_using_id_offset(metadata_offset)
+                .unwrap();
+            verify_inline_metadata_fetched_storage_record_offsets(storage_record, &records, i);
         }
     }
 }

@@ -7,6 +7,7 @@ pub struct ImdbRecord {
     pub value: ImdbRecordValue,
 }
 
+#[derive(Debug)]
 pub struct ImdbRecordMetaData {
     pub check_sum: u32,
     pub key_len: u32,

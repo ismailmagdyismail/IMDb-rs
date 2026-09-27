@@ -51,7 +51,7 @@ mod test {
 
     #[test]
     fn test_populating_whole_index() {
-        let index_path: &Path = Path::new("data_index_test.bin");
+        let index_path: &Path = Path::new("memory_only_index_populating_test.bin");
         write_mock_records(&index_path, 100);
         let pager = ImdbInlineMetaDataPager::new(&index_path).unwrap();
         let mut index = ImdbMemoryOnlyIndex::new(pager).unwrap();

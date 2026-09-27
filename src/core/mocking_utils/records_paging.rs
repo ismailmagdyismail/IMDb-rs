@@ -15,6 +15,27 @@ pub fn create_kv_entry(iteration: usize) -> (String, String) {
     (expected_key, expected_val)
 }
 
+pub fn write_records(records: &Vec<(ImdbRecord, ImdbRecordMetaData)>, file_path: &Path) {
+    let mut options = OpenOptions::new();
+    let file = options
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(file_path)
+        .unwrap();
+    let mut buf_writer = BufWriter::new(file);
+    for (record, metadata) in records {
+        let mut buffer = Vec::new();
+        buffer.resize(
+            HEADER_SIZE as usize + metadata.key_len as usize + metadata.val_len as usize,
+            b'0',
+        );
+        encode_record(&record, &metadata, buffer.as_mut_slice()).unwrap();
+        buf_writer.write_all(&buffer).unwrap();
+    }
+    buf_writer.flush().unwrap();
+}
+
 pub fn write_mock_records(file_path: &Path, records_count: usize) {
     let mut options = OpenOptions::new();
     let file = options

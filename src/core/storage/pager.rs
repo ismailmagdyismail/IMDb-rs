@@ -2,6 +2,7 @@ use crate::core::record::imdb_record::{ImdbRecord, ImdbRecordMetaData};
 
 pub type Offset = u64;
 
+#[derive(Debug)]
 pub struct RecordMetadataStorageEntry {
     pub metadata: ImdbRecordMetaData,
     pub record: ImdbRecord,
@@ -37,7 +38,7 @@ pub trait ImdbRecordPager {
     ) -> Result<Option<RecordMetadataStorageEntry>, String>;
 
     fn load_specific_record_and_meta_data_using_id_offset(
-        &self,
+        &mut self,
         offset: Offset,
     ) -> Result<Option<RecordMetadataStorageEntry>, String>;
 }
