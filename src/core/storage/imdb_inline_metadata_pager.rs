@@ -63,6 +63,22 @@ impl ImdbInlineMetaDataPager {
     }
 }
 
+impl Iterator for ImdbInlineMetaDataPager {
+    type Item = Result<(ImdbRecordMetaData, ImdbRecord), String>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.load_record() {
+            Result::Ok(optional_record) => {
+                if let Option::Some((metadata, record)) = optional_record {
+                    return Option::Some(Result::Ok((metadata, record)));
+                } else {
+                    return Option::None;
+                }
+            }
+            Result::Err(err) => Option::Some(Result::Err(err)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::{
@@ -143,5 +159,19 @@ mod test {
             loaded_records_count += 1;
         }
         assert_eq!(loaded_records_count, records_count);
+    }
+
+    #[test]
+    pub fn test_loading_iterator() {
+        let file_path = Path::new("data_test.bin");
+        let records_count = 100;
+        write_mock_records(file_path, records_count);
+
+        let pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
+
+        for (i, result) in pager.enumerate() {
+            let (_, record) = result.unwrap();
+            assert!(verify_record(i, &record));
+        }
     }
 }
