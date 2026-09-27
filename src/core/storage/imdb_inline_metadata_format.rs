@@ -14,7 +14,7 @@ use crate::core::{
     serdes::slicer::Slicer,
 };
 
-pub fn decode_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord, u32), String> {
+pub fn decode_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord, u32, u32), String> {
     let mut required_buffer_size = HEADER_SIZE;
     if buffer.len() < required_buffer_size as usize {
         let error = format!(
@@ -40,7 +40,7 @@ pub fn decode_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord, u
     let (record, record_size) = ImdbRecord::deserialize_copy(&metadata, record_buffer)?;
     debug_assert!(metadata_size == HEADER_SIZE);
     debug_assert!(record_size == metadata.key_len + metadata.val_len);
-    Ok((metadata, record, record_size + metadata_size))
+    Ok((metadata, record, metadata_size, record_size))
 }
 
 pub fn encode_record(
@@ -101,7 +101,7 @@ mod test {
         }
 
         for i in 0..100 {
-            let (decoded_metadata, decoded_record, _) = decode_record(&buffers[i]).unwrap();
+            let (decoded_metadata, decoded_record, _, _) = decode_record(&buffers[i]).unwrap();
             let actual_meta_data = &records[i].0;
             assert_eq!(decoded_metadata.key_len, actual_meta_data.key_len);
             assert_eq!(decoded_metadata.val_len, actual_meta_data.val_len);

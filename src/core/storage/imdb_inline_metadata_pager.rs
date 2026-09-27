@@ -1,12 +1,12 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Seek},
     path::Path,
 };
 
-use crate::core::{
-    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
-    storage::imdb_inline_metadata_format::decode_record,
+use crate::core::storage::{
+    imdb_inline_metadata_format::decode_record,
+    pager::{ImdbRecordPager, RecordMetadataStorageEntry},
 };
 
 /*
@@ -19,7 +19,7 @@ use crate::core::{
 
 pub struct ImdbInlineMetaDataPager {
     // data_file: File,
-    buf_io: BufReader<File>,
+    buf_reader: BufReader<File>,
 }
 
 impl ImdbInlineMetaDataPager {
@@ -35,11 +35,11 @@ impl ImdbInlineMetaDataPager {
                 return formatted_errror;
             })?;
         Ok(ImdbInlineMetaDataPager {
-            buf_io: BufReader::new(file),
+            buf_reader: BufReader::new(file),
         })
     }
 
-    pub fn load_record(&mut self) -> Result<Option<(ImdbRecordMetaData, ImdbRecord)>, String> {
+    pub fn load_record(&mut self) -> Result<Option<RecordMetadataStorageEntry>, String> {
         // buffered IO handles sliding window and proxies any needed byte fetching Requests to the Disk-IO
         // N bytes are consumed (HEADER, Payload) then window moves over the decoded size
         // if buffer is empty, a request to fetch N KBytes to the disk is made, cached in memory
@@ -47,7 +47,7 @@ impl ImdbInlineMetaDataPager {
         //  1- Os Page cache into internal buffer of BufReader
         //  2- Copy from BufReader internal buffer, into the newly create struct / Record [I think this can be removed]
         // if EOF is reached, internal buffer is empty
-        let buffer = self.buf_io.fill_buf().map_err(|err: std::io::Error| {
+        let buffer = self.buf_reader.fill_buf().map_err(|err: std::io::Error| {
             let formatted_error = format!("[Imdb Error happend while loading record]: {}", err);
             formatted_error
         })?;
@@ -55,21 +55,47 @@ impl ImdbInlineMetaDataPager {
             return Ok(None);
         }
         // deserialize
-        let (metadata, record, decoded_size) = decode_record(buffer)?;
-        // slide the window over
-        self.buf_io.consume(decoded_size as usize);
+        let (metadata, record, metadata_size, record_size) = decode_record(buffer)?;
 
-        Ok(Some((metadata, record)))
+        // record offset of metadata
+        // slide the window over by header
+        let metadata_offset = self.buf_reader.stream_position().map_err(|err| {
+            return format!("[Imdb Pager error while getting metadata offset]: {}", err);
+        })?;
+        self.buf_reader.consume(metadata_size as usize);
+
+        // record offset of record
+        // slide the window again to pass record
+        let record_offset = self.buf_reader.stream_position().map_err(|err| {
+            return format!("[Imdb Pager error while getting record offset]: {}", err);
+        })?;
+        self.buf_reader.consume(record_size as usize);
+
+        let entry = RecordMetadataStorageEntry {
+            metadata,
+            record,
+            record_offset,
+            metadata_offset,
+        };
+        Ok(Some(entry))
+    }
+}
+
+impl ImdbRecordPager for ImdbInlineMetaDataPager {
+    fn load_next_record_and_metadata(
+        &mut self,
+    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+        return self.load_record();
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<(ImdbRecordMetaData, ImdbRecord), String>;
+    type Item = Result<RecordMetadataStorageEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.load_record() {
             Result::Ok(optional_record) => {
-                if let Option::Some((metadata, record)) = optional_record {
-                    return Option::Some(Result::Ok((metadata, record)));
+                if let Option::Some(entry) = optional_record {
+                    return Option::Some(Result::Ok(entry));
                 } else {
                     return Option::None;
                 }
@@ -151,8 +177,8 @@ mod test {
 
         loop {
             let res = pager.load_record().unwrap();
-            if let Some((_, record)) = res {
-                assert!(verify_record(loaded_records_count, &record));
+            if let Some(entry) = res {
+                assert!(verify_record(loaded_records_count, &entry.record));
             } else {
                 break;
             }
@@ -170,8 +196,8 @@ mod test {
         let pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
 
         for (i, result) in pager.enumerate() {
-            let (_, record) = result.unwrap();
-            assert!(verify_record(i, &record));
+            let entry = result.unwrap();
+            assert!(verify_record(i, &entry.record));
         }
     }
 }
