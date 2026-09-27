@@ -6,7 +6,7 @@ use std::{
 
 use crate::core::storage::{
     imdb_inline_metadata_format::decode_record,
-    pager::{ImdbRecordPager, RecordMetadataStorageEntry},
+    pager::{ImdbRecordPager, Offset, RecordMetadataStorageEntry},
 };
 
 /*
@@ -40,7 +40,9 @@ impl ImdbInlineMetaDataPager {
         })
     }
 
-    pub fn load_record(&mut self) -> Result<Option<RecordMetadataStorageEntry>, String> {
+    pub fn read_next_record_and_meta_data(
+        &mut self,
+    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
         // buffered IO handles sliding window and proxies any needed byte fetching Requests to the Disk-IO
         // N bytes are consumed (HEADER, Payload) then window moves over the decoded size
         // if buffer is empty, a request to fetch N KBytes to the disk is made, cached in memory
@@ -77,23 +79,33 @@ impl ImdbInlineMetaDataPager {
             record,
             record_offset,
             metadata_offset,
+            identfying_offset: metadata_offset,
         };
         Ok(Some(entry))
     }
+
+    pub fn read_specific_record_and_meta_data(&self) {}
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
     fn load_next_record_and_metadata(
         &mut self,
     ) -> Result<Option<RecordMetadataStorageEntry>, String> {
-        return self.load_record();
+        return self.read_next_record_and_meta_data();
+    }
+
+    fn load_specific_record_and_meta_data_using_id_offset(
+        &self,
+        offset: Offset,
+    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+        Err("".to_string())
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
     type Item = Result<RecordMetadataStorageEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.load_record() {
+        match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {
                 if let Option::Some(entry) = optional_record {
                     return Option::Some(Result::Ok(entry));
@@ -125,7 +137,7 @@ mod test {
         let mut loaded_records_count = 0;
 
         loop {
-            let res = pager.load_record().unwrap();
+            let res = pager.read_next_record_and_meta_data().unwrap();
             if let Some(entry) = res {
                 assert!(verify_record(loaded_records_count, &entry.record));
             } else {

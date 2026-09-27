@@ -30,7 +30,7 @@ where
         loop {
             if let Some(storage_entry) = self.index_pager.load_next_record_and_metadata()? {
                 self.kv_offset_index
-                    .insert(storage_entry.record.key, storage_entry.record_offset);
+                    .insert(storage_entry.record.key, storage_entry.identfying_offset);
             } else {
                 break;
             }
