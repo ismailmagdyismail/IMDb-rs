@@ -7,3 +7,6 @@ pub mod operations;
 pub mod commands;
 pub mod repl;
 pub mod serdes;
+pub mod storage;
+pub mod index;
+pub mod mocking_utils;

@@ -1,11 +1,13 @@
 pub type ImdbRecordKey = Vec<u8>;
 pub type ImdbRecordValue = Vec<u8>;
 
+#[derive(Debug)]
 pub struct ImdbRecord {
     pub key: ImdbRecordKey,
     pub value: ImdbRecordValue,
 }
 
+#[derive(Debug)]
 pub struct ImdbRecordMetaData {
     pub check_sum: u32,
     pub key_len: u32,

@@ -10,7 +10,7 @@ impl ImdbRecord {
         return self.key.len() as u32 + self.value.len() as u32;
     }
 
-    pub fn serialize(&self, sink_buffer: &mut Vec<u8>) -> Result<u32, String> {
+    pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, String> {
         let required_size = self.ser_size();
         if (sink_buffer.len() as u32) < required_size {
             return Result::Err("[Buffer for serialization is too small]".to_string());
@@ -28,7 +28,7 @@ impl ImdbRecord {
 impl ImdbRecord {
     pub fn deserialize_copy(
         meta_data: &ImdbRecordMetaData,
-        src_buffer: &Vec<u8>,
+        src_buffer: &[u8],
     ) -> Result<(ImdbRecord, u32), String> {
         if meta_data.key_len + meta_data.val_len > src_buffer.len() as u32 {
             return Result::Err("[Buffer for derserilization is too small]".to_string());
@@ -73,7 +73,7 @@ impl ImdbRecordMetaData {
         Result::Ok(serializer.size())
     }
 
-    pub fn deserialize_copy(src_buffer: &Vec<u8>) -> Result<(ImdbRecordMetaData, u32), String> {
+    pub fn deserialize_copy(src_buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), String> {
         if HEADER_SIZE > src_buffer.len() as u32 {
             return Result::Err("[Buffer for Meta-Data derserilization is too small]".to_string());
         }
