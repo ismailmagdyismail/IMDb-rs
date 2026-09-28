@@ -1,13 +1,19 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Seek, SeekFrom},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::Path,
 };
 
-use crate::core::storage::{
-    buffer_helpers::advance_internal_buffer_cursor,
-    imdb_inline_metadata_format::decode_record,
-    pager::{ImdbRecordPager, Offset, RecordMetadataStorageEntry},
+use crate::core::{
+    record::imdb_record::HEADER_SIZE,
+    storage::{
+        buffer_helpers::{
+            advance_internal_buffer_cursor_by_metadata,
+            advance_internal_buffer_cursor_by_record_payload,
+        },
+        imdb_inline_metadata_format::{decode_metadata, decode_record_payload},
+        pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
+    },
 };
 
 /*
@@ -18,6 +24,7 @@ use crate::core::storage::{
 +---------------+--------------+----------------+------------+---------------+
 */
 
+const RANDOM_BUFFER_READ_SIZE: usize = 1024;
 #[derive(Debug)]
 pub struct ImdbInlineMetaDataPager {
     buf_reader: BufReader<File>,               // for stateful iterative reads
@@ -41,7 +48,8 @@ impl ImdbInlineMetaDataPager {
             let formatted_errror = format!("[Imdb Opening Data file Error]: {}", error);
             return formatted_errror;
         })?;
-        let random_access_buf_reader = BufReader::with_capacity(1024, stateless_read_file);
+        let random_access_buf_reader =
+            BufReader::with_capacity(RANDOM_BUFFER_READ_SIZE, stateless_read_file);
 
         Ok(ImdbInlineMetaDataPager {
             buf_reader: BufReader::new(file),
@@ -49,91 +57,224 @@ impl ImdbInlineMetaDataPager {
         })
     }
 
-    pub fn read_next_record_and_meta_data(
-        &mut self,
-    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
-        // buffered IO handles sliding window and proxies any needed byte fetching Requests to the Disk-IO
-        // N bytes are consumed (HEADER, Payload) then window moves over the decoded size
-        // if buffer is empty, a request to fetch N KBytes to the disk is made, cached in memory
-        // total of 2 copies are made
-        //  1- Os Page cache into internal buffer of BufReader
-        //  2- Copy from BufReader internal buffer, into the newly create struct / Record [I think this can be removed]
-        // if EOF is reached, internal buffer is empty
-        let buffer = self.buf_reader.fill_buf().map_err(|err: std::io::Error| {
-            let formatted_error = format!("[Imdb Error happend while loading record]: {}", err);
-            formatted_error
-        })?;
-        if buffer.is_empty() {
-            return Ok(None);
+    fn load_record(
+        buf_reader: &mut BufReader<File>,
+    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+        // Fill the internal buffer of file reader
+        // it may or may not be filled with enough data to decode the record
+        // cursor / available bytes MUST be big enough to accomodate at least the Meta-Data
+        // since header is what is to decode the rest (iteratively).
+        // 1. Meta-Data Reading:
+        //      A- Fits in the buffer
+        //          - we can decode it directly from the buffer
+        //      B- Doesn't fit in the buffer
+        //          - we would have to move cursor far enough back to accomdate for the fixed header
+        //          - could simply move cursor to the beginning
+        //          - then we could meta-data decode after that
+        // 2. Record Payload Reading:
+        //     A- Required size based on Meta-Data Info fits in the inline bufReader internal buffer
+        //         - decode it directly from the bufReader internal buffer without additional copies
+        //     B- Required size based on Meta-Data Info DOESN't FIT in the inline bufReader internal buffer
+        //         - allocate an out of place buffer big enough to accomdate the record payload size
+        //         - decode it in that out of place buffer
+        /*
+                   ┌─────────────────────────┐
+                   │ Fill BufReader Buffer   │
+                   └────────────┬────────────┘
+                                │
+                                ▼
+                   ┌─────────────────────────┐
+                   │ Enough bytes for fixed  │
+                   │ Meta-Data?              │
+                   └────────────┬────────────┘
+                          YES   │   NO
+                       ┌────────┘   └──────────────┐
+                       ▼                           ▼
+             ┌──────────────────┐      ┌─────────────────────┐
+             │ Decode Meta-Data │      │ Move/compact cursor │
+             │ from buffer      │      │ to make room        │
+             └────────┬─────────┘      └──────────┬──────────┘
+                      │                           │
+                      │                           ▼
+                      │                 ┌────────────────────┐
+                      │                 │ Refill buffer      │
+                      │                 └──────────┬─────────┘
+                      │                            │
+                      └──────────────┬─────────────┘
+                                     ▼
+                           ┌──────────────────────┐
+                           │ Determine Payload    │
+                           │ Size from Meta-Data  │
+                           └──────────┬───────────┘
+                                      │
+                             ┌────────┴─────────┐
+                             │                  │
+                            FIT                DOESN'T FIT
+                             │                  │
+                             ▼                  ▼
+                   ┌─────────────────┐   ┌──────────────────┐
+                   │ Decode directly │   │ Allocate         │
+                   │ from internal   │   │ out-of-place     │
+                   │ BufReader       │   │ payload buffer   │
+                   │ buffer          │   └────────┬─────────┘
+                   └────────┬────────┘            │
+                            │                     ▼
+                            │             ┌──────────────────┐
+                            │             │ Fill payload     │
+                            │             │ into allocated   │
+                            │             │ buffer           │
+                            │             └────────┬─────────┘
+                            │                      │
+                            └──────────┬───────────┘
+                                       ▼
+                             ┌────────────────────┐
+                             │ Decode Payload     │
+                             └─────────┬──────────┘
+                                       ▼
+                             ┌────────────────────┐
+                             │ Record Complete    │
+                             └────────────────────┘
+        */
+        // Sizing:
+        //  A. Setting max limits for records sizes
+        //      - we could sit a hard limit on max records to avoid large kv entries which could result in huge allocations
+        //      - Like tigerbeetle setting hard limits on everything
+        //      - but we will keep it simple for now
+        //  B. Make all records have same size
+        //      - simpler, easier in SerDes
+        //      - very good for random reads, requires no indexing
+        //      - But wastes Disk-Space and Disk-Bandwidth
+        // Copying:
+        //  A. Copying Count:
+        //      - Copy[1]: from os-page cache to the internal buffers,
+        //      - Copy[2]: from internal buffers to consruct ImdbStorageRecord
+        //  B. Zero-Copy
+        //      - We could use avoid BufReader completly , and use Our own buffers + Direct-IO
+        //      - that buffer gets moved instead of being pooled, reused by BufReader
+        //      - that buffer is sliced and borrowed from to create the ImdbStorageRecord
+        // we wil stick to copying, not setting limit on sizes for now JUST for simplicity
+
+        // A. if data is already cached, we decode directly from it
+        //      - this involved 1 Copy only (from internal buffer to created ImdbStorageRecord)
+        // B. if data is not cached,
+        // NOTE: we could SIMPLIFY this and always use "buf_reader.read_exact(buffer)" but this will cause 2 copies to happen at all times
+        // Either from (internal buffer to supplied buffer then from supplied to ImdbStorageRecrod)
+        // OR From (Os-Page Cache to supplied buffer then from supplied buffer to ImdbStorageRecord)
+
+        let mut buffer = buf_reader.buffer();
+        if buffer.len() < HEADER_SIZE as usize {
+            buffer = buf_reader.fill_buf().map_err(|err: std::io::Error| {
+                let formatted_error = format!("[Imdb Error happend while loading record]: {}", err);
+                formatted_error
+            })?
         }
-        // deserialize
-        let (metadata, record, metadata_size, record_size) = decode_record(buffer)?;
+        // if empty after re-filling then it may be the last record
+        if buffer.is_empty() {
+            return Result::Ok(None);
+        }
+        // if only partial Meta-Data entry is read even after re-filling, then it may have been corrupted
+        // cause at this point whole HEADER_SIZE should be in memory
+        if buffer.len() < HEADER_SIZE as usize {
+            let formatted_error = format!(
+                "[Imdb Error happend while loading Header]: expected {} bytes cached, found {} it may have been corrupted | truncated",
+                HEADER_SIZE,
+                buffer.len(),
+            );
+            return Result::Err(formatted_error);
+        }
+        let (decoded_metadata, metadata_size) = decode_metadata(buffer)?;
+        let required_record_size = decoded_metadata.key_len + decoded_metadata.val_len;
+        let metadata_offset =
+            advance_internal_buffer_cursor_by_metadata(buf_reader, metadata_size)?;
 
-        let (metadata_offset, record_offset) =
-            advance_internal_buffer_cursor(&mut self.buf_reader, metadata_size, record_size)?;
+        // move over buffer to point to the payload slice
+        // so that slice is now starting from payload
+        // so that slice size reflects availble payload size (not containing header)
+        let buffer = buf_reader.buffer();
 
-        let entry = RecordMetadataStorageEntry {
-            metadata,
-            record,
+        let (decoded_record, _record_size, record_offset) =
+            if buffer.len() < required_record_size as usize {
+                // if payload larger than existing internal buffer (2-Copies branch)
+                // we create an out of place buffer that copies from the internal buffer (the cached bytes) + os-page cache
+                // BufReader may bypass its own internal buffer (read some from it, some from os-page cache)
+                // if not all bytes is available / cached internally
+                // bufReader handles
+                //  1. Routing bytes copying (some from internal buffer, some from os-page cache)
+                //  2. Advancing internal cursors (internal buffer cursor, file cursor)
+                let mut record_buffer = vec![b'0'; required_record_size as usize];
+                buf_reader
+                    .read_exact(record_buffer.as_mut_slice())
+                    .map_err(|_| {
+                        let formatted_error = format!("");
+                        return formatted_error;
+                    })?;
+                let (record, record_size) =
+                    decode_record_payload(&decoded_metadata, record_buffer.as_slice())?;
+                let record_offset = buf_reader.stream_position().map_err(|err| {
+                    return format!(
+                        "[Imdb Pager error while getting record payload offset]: {}",
+                        err
+                    );
+                })?;
+                (record, record_size, record_offset)
+            } else {
+                // if payload fits within internal buffer
+                // then we decode directly from that internal buffer (1-Copy branch)
+                // we advance cursor manually
+                let (record, record_size) = decode_record_payload(&decoded_metadata, buffer)?;
+                let record_offset =
+                    advance_internal_buffer_cursor_by_record_payload(buf_reader, record_size)?;
+                (record, record_size, record_offset)
+            };
+
+        let storage_record = ImdbRecordMetadataStorageEntry {
+            record: decoded_record,
             record_offset,
+            metadata: decoded_metadata,
             metadata_offset,
             identfying_offset: metadata_offset,
         };
-        Ok(Some(entry))
+        return Result::Ok(Some(storage_record));
+    }
+
+    pub fn read_next_record_and_meta_data(
+        &mut self,
+    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+        return ImdbInlineMetaDataPager::load_record(&mut self.buf_reader);
     }
 
     pub fn read_specific_record_and_meta_data(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+        // this random access always flushes internal buffer
+        // so access using this method always involve fetching data from Os-Page-Cache | Disk if not cached
         self.random_access_buf_reader
             .seek(SeekFrom::Start(offset))
             .map_err(|err| {
                 return format!("[Imdb Random Seek failure]: {}", err);
             })?;
-        let buffer = self.random_access_buf_reader.fill_buf().map_err(|err| {
-            return format!(
-                "[Imdb Error happend while loading record with offset {}]: {}",
-                offset, err
-            );
-        })?;
-        if buffer.is_empty() {
-            return Ok(None);
-        }
-        let (metadata, record, metadata_size, record_size) = decode_record(buffer)?;
-        let (metadata_offset, record_offset) = advance_internal_buffer_cursor(
-            &mut self.random_access_buf_reader,
-            metadata_size,
-            record_size,
-        )?;
-        let record_entry = RecordMetadataStorageEntry {
-            record,
-            metadata,
-            record_offset,
-            metadata_offset,
-            identfying_offset: metadata_offset,
-        };
-        Ok(Some(record_entry))
+        return ImdbInlineMetaDataPager::load_record(&mut self.random_access_buf_reader);
     }
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
     fn load_next_record_and_metadata(
         &mut self,
-    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
         return self.read_next_record_and_meta_data();
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<RecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
         return self.read_specific_record_and_meta_data(offset);
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<RecordMetadataStorageEntry, String>;
+    type Item = Result<ImdbRecordMetadataStorageEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {
@@ -157,7 +298,7 @@ mod test {
         record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
-            pager::{ImdbRecordPager, RecordMetadataStorageEntry},
+            pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager},
         },
     };
 
@@ -215,7 +356,7 @@ mod test {
     }
 
     pub fn verify_inline_metadata_fetched_storage_record_offsets(
-        fetched_storage_record: Option<RecordMetadataStorageEntry>,
+        fetched_storage_record: Option<ImdbRecordMetadataStorageEntry>,
         original_records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
         record_to_verify_against_index: usize,
     ) {
@@ -303,4 +444,46 @@ mod test {
             verify_inline_metadata_fetched_storage_record_offsets(storage_record, &records, i);
         }
     }
+
+    #[test]
+    pub fn test_iterative_read_records_payload_spanning_multiple_buffer_reads() {
+        let path = Path::new("inline_metadata_pager_spanning_multiple_buffers_reads.bin");
+        let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
+        let buffer_capacity = pager.buf_reader.capacity();
+
+        let mut records = Vec::new();
+        let key = vec![b'1'; buffer_capacity];
+        let value = vec![b'2'; buffer_capacity];
+        records.push((
+            ImdbRecord {
+                key: key.clone(),
+                value: value.clone(),
+            },
+            ImdbRecordMetaData {
+                key_len: key.len() as u32,
+                val_len: value.len() as u32,
+                check_sum: 0,
+            },
+        ));
+
+        write_records(&records, path);
+
+        let storage_record = pager.load_next_record_and_metadata().unwrap();
+        assert!(storage_record.is_some());
+        let storage_record = storage_record.unwrap();
+
+        // verify id
+        assert_eq!(storage_record.identfying_offset, 0);
+
+        // verify metadata
+        assert_eq!(storage_record.metadata.check_sum, records[0].1.check_sum);
+        assert_eq!(storage_record.metadata.key_len, records[0].1.key_len);
+        assert_eq!(storage_record.metadata.val_len, records[0].1.val_len);
+
+        // verify record
+        assert_eq!(storage_record.record.key, records[0].0.key);
+        assert_eq!(storage_record.record.value, records[0].0.value);
+    }
+
+    // pub fn test_iterative_read_metadata_not_fitting_in_buffer() {}
 }
