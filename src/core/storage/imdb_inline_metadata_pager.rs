@@ -294,7 +294,10 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
-        mocking_utils::records_paging::{verify_record, write_mock_records, write_records},
+        mocking_utils::{
+            inline_metadata_mocking_utils::find_record_offset,
+            records_paging::{verify_record, write_mock_records, write_records},
+        },
         record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
@@ -335,24 +338,6 @@ mod test {
             let entry = result.unwrap();
             assert!(verify_record(i, &entry.record));
         }
-    }
-
-    pub fn find_record_offset(
-        records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
-        index: usize,
-    ) -> (u64, u64) {
-        let metadata_offset_expected = records.iter().enumerate().fold(0, |prev, (i, entry)| {
-            if i >= index {
-                return prev;
-            }
-            let (record, metadata) = entry;
-            return prev + metadata.ser_size() + record.ser_size();
-        });
-        let record_offset_expected = metadata_offset_expected + records[index].1.ser_size();
-        return (
-            metadata_offset_expected as u64,
-            record_offset_expected as u64,
-        );
     }
 
     pub fn verify_inline_metadata_fetched_storage_record_offsets(
