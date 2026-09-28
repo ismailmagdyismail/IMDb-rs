@@ -202,6 +202,12 @@ impl ImdbInlineMetaDataPager {
                 //  1. Routing bytes copying (some from internal buffer, some from os-page cache)
                 //  2. Advancing internal cursors (internal buffer cursor, file cursor)
                 let mut record_buffer = vec![b'0'; required_record_size as usize];
+                let record_offset = buf_reader.stream_position().map_err(|err| {
+                    return format!(
+                        "[Imdb Pager error while getting record payload offset]: {}",
+                        err
+                    );
+                })?;
                 buf_reader
                     .read_exact(record_buffer.as_mut_slice())
                     .map_err(|_| {
@@ -210,12 +216,6 @@ impl ImdbInlineMetaDataPager {
                     })?;
                 let (record, record_size) =
                     decode_record_payload(&decoded_metadata, record_buffer.as_slice())?;
-                let record_offset = buf_reader.stream_position().map_err(|err| {
-                    return format!(
-                        "[Imdb Pager error while getting record payload offset]: {}",
-                        err
-                    );
-                })?;
                 (record, record_size, record_offset)
             } else {
                 // if payload fits within internal buffer
@@ -295,7 +295,7 @@ mod test {
 
     use crate::core::{
         mocking_utils::records_paging::{verify_record, write_mock_records, write_records},
-        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+        record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
             pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager},
@@ -485,5 +485,121 @@ mod test {
         assert_eq!(storage_record.record.value, records[0].0.value);
     }
 
-    // pub fn test_iterative_read_metadata_not_fitting_in_buffer() {}
+    #[test]
+    pub fn test_iterative_read_metadata_not_fitting_in_buffer() {
+        let path = Path::new("inline_metadata_pager_header_spanning_multiple_buffers_reads.bin");
+        let pager = ImdbInlineMetaDataPager::new(path).unwrap();
+        let buffer_capacity = pager.buf_reader.capacity();
+
+        let mut records = Vec::new();
+        let key_size = 100;
+        let key = vec![b'1'; key_size];
+        // takes the rest of the buffer, expect 10 bytes to leave room for next header of next record
+        // so next record's header could span current buffer + and another one
+        let value = vec![b'2'; buffer_capacity - key_size - HEADER_SIZE as usize];
+        records.push((
+            ImdbRecord {
+                key: key.clone(),
+                value: value.clone(),
+            },
+            ImdbRecordMetaData {
+                key_len: key.len() as u32,
+                val_len: value.len() as u32,
+                check_sum: 0,
+            },
+        ));
+        records.push((
+            ImdbRecord {
+                key: value.clone(),
+                value: key.clone(),
+            },
+            ImdbRecordMetaData {
+                key_len: value.len() as u32,
+                val_len: key.len() as u32,
+                check_sum: 0,
+            },
+        ));
+
+        write_records(&records, path);
+
+        for (i, record) in pager.enumerate() {
+            let (metadata_offset, record_offset) = find_record_offset(&records, i);
+            let storage_record = record.unwrap();
+
+            // offsets
+            assert_eq!(storage_record.identfying_offset, metadata_offset);
+            assert_eq!(storage_record.record_offset, record_offset);
+            assert_eq!(storage_record.metadata_offset, metadata_offset);
+
+            // verify metadata
+            assert_eq!(storage_record.metadata.check_sum, records[i].1.check_sum);
+            assert_eq!(storage_record.metadata.key_len, records[i].1.key_len);
+            assert_eq!(storage_record.metadata.val_len, records[i].1.val_len);
+
+            // verify record
+            assert_eq!(storage_record.record.key, records[i].0.key);
+            assert_eq!(storage_record.record.value, records[i].0.value);
+        }
+    }
+
+    #[test]
+    pub fn test_random_read_records_payload_spanning_multiple_buffers() {
+        let path =
+            Path::new("inline_metadata_pager_random_reads_spanning_multiple_buffers_reads.bin");
+        let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
+        let buffer_capacity = pager.buf_reader.capacity();
+
+        let mut records = Vec::new();
+        let key_size = 100;
+        let key = vec![b'1'; key_size];
+        // takes the rest of the buffer, expect 10 bytes to leave room for next header of next record
+        // so next record's header could span current buffer + and another one
+        let value = vec![b'2'; buffer_capacity - key_size - HEADER_SIZE as usize];
+        records.push((
+            ImdbRecord {
+                key: key.clone(),
+                value: value.clone(),
+            },
+            ImdbRecordMetaData {
+                key_len: key.len() as u32,
+                val_len: value.len() as u32,
+                check_sum: 0,
+            },
+        ));
+        records.push((
+            ImdbRecord {
+                key: key.clone(),
+                value: value.clone(),
+            },
+            ImdbRecordMetaData {
+                key_len: key.len() as u32,
+                val_len: value.len() as u32,
+                check_sum: 0,
+            },
+        ));
+
+        write_records(&records, path);
+
+        for i in 0..records.len() {
+            let (metadata_offset, record_offset) = find_record_offset(&records, i);
+            let storage_record = pager
+                .load_specific_record_and_meta_data_using_id_offset(metadata_offset)
+                .unwrap()
+                .unwrap();
+
+            // offsets
+            assert_eq!(storage_record.identfying_offset, metadata_offset);
+            assert_eq!(storage_record.record_offset, record_offset);
+            assert_eq!(storage_record.metadata_offset, metadata_offset);
+
+            // verify metadata
+            assert_eq!(storage_record.metadata.check_sum, records[i].1.check_sum);
+            assert_eq!(storage_record.metadata.key_len, records[i].1.key_len);
+            assert_eq!(storage_record.metadata.val_len, records[i].1.val_len);
+
+            // verify record
+            assert_eq!(storage_record.record.key, records[i].0.key);
+            assert_eq!(storage_record.record.value, records[i].0.value);
+        }
+    }
 }

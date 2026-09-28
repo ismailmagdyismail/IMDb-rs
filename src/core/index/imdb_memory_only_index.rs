@@ -59,7 +59,7 @@ mod test {
 
     use crate::core::{
         index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
-        mocking_utils::records_paging::{create_kv_entry, write_mock_records, write_records},
+        mocking_utils::records_paging::{create_kv_entry, write_mock_records},
         storage::imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
     };
 
