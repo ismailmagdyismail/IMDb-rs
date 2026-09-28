@@ -46,7 +46,6 @@ pub fn advance_internal_buffer_cursor(
     // record offset of record
     // slide the window again to pass record
     let record_offset = advance_internal_buffer_cursor_by_record_payload(buffer, record_size)?;
-    buffer.consume(record_size as usize);
 
     Ok((metadata_offset, record_offset))
 }
