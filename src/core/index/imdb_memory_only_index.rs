@@ -43,7 +43,7 @@ impl ImdbMemoryOnlyIndex {
     // callers may have result cached in some BufferPool so this couples index with disk access
     // up tp caller to coordinate that
     pub fn read_record<T>(
-        &mut self,
+        &self,
         key: &ImdbRecordKey,
         pager: &mut T,
     ) -> Result<Option<ImdbRecord>, String>

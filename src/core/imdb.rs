@@ -8,20 +8,18 @@ use crate::core::{
     },
     imdb_config::ImdbConfig,
     record::imdb_record::ImdbRecord,
-    storage::imdb_inline_metadata_storage::ImdbInlineMetaDataStorage,
+    storage::imdb_storage_engine::ImdbStorageEngine,
 };
 
 pub struct Imdb {
     pub config: ImdbConfig,
-    pub storage: ImdbInlineMetaDataStorage,
+    pub storage: ImdbStorageEngine,
 }
 
 impl Imdb {
     pub fn new(config: ImdbConfig) -> Result<Imdb, String> {
         let db_dir_path = Path::new(&config.db_path);
-        Imdb::init_db_directory(db_dir_path)?;
-
-        let storage = ImdbInlineMetaDataStorage::new(db_dir_path)?;
+        let storage = ImdbStorageEngine::new(db_dir_path)?;
 
         let db = Imdb { config, storage };
         Ok(db)
@@ -60,18 +58,5 @@ impl Imdb {
         let mut get_command = ImdbGetCommand::new(self);
         let val = get_command.execute_command(insert_command_args)?;
         return Ok(val);
-    }
-
-    // creates directory (with all of its missing parents)
-    // if directory already exists, no changes occur
-    fn init_db_directory(dir_path: &Path) -> Result<(), String> {
-        std::fs::create_dir_all(dir_path).map_err(|err| {
-            let fmt_error = format!(
-                "[Imdb Directory]: error happend while createing Imdb directory {} ",
-                err
-            );
-            fmt_error
-        })?;
-        Ok(())
     }
 }
