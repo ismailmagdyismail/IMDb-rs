@@ -11,10 +11,9 @@ impl<'a> ImdbInsertCommand<'a> {
         ImdbInsertCommand { imdb }
     }
 
-    pub fn execute_command(&mut self, insert_args: ImdbInsertCommandArgs) {
-        self.imdb
-            .kv_store
-            .insert(insert_args.record.key, insert_args.record.value);
+    pub fn execute_command(&mut self, insert_args: ImdbInsertCommandArgs) -> Result<(), String> {
+        self.imdb.storage.write_record(insert_args.record)?;
+        Ok(())
     }
 }
 

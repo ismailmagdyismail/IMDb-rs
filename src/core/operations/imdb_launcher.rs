@@ -12,7 +12,8 @@ pub fn launch_imdb(args: Vec<String>) -> Result<(), String> {
     match imdb_operation {
         ImdbOperation::Deamon => todo!("[Imdb:: Server|Deamon Mode Not Supported Yet!!]"),
         ImdbOperation::Repl => {
-            let mut repl: ImdbRepl = ImdbRepl::new(Imdb::new());
+            let db = Imdb::new(imdb_config)?;
+            let mut repl: ImdbRepl = ImdbRepl::new(db);
             repl.run();
         }
     }

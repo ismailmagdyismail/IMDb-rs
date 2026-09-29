@@ -27,7 +27,7 @@ impl ImdbRepl {
                     }
                     Ok(res) => {
                         if let Some(value) = res {
-                            println!("{}", String::from_utf8_lossy(value).to_string());
+                            println!("{}", String::from_utf8(value).unwrap());
                         }
                     }
                 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::path::Path;
 
 use crate::core::{
     commands::{
@@ -6,21 +6,28 @@ use crate::core::{
         imdb_get_command::{ImdbGetCommand, ImdbGetCommandArgs},
         imdb_insert_command::{ImdbInsertCommand, ImdbInsertCommandArgs},
     },
-    record::imdb_record::{ImdbRecordKey, ImdbRecordValue},
+    imdb_config::ImdbConfig,
+    record::imdb_record::ImdbRecord,
+    storage::imdb_inline_metadata_storage::ImdbInlineMetaDataStorage,
 };
 
 pub struct Imdb {
-    pub kv_store: HashMap<ImdbRecordKey, ImdbRecordValue>,
+    pub config: ImdbConfig,
+    pub storage: ImdbInlineMetaDataStorage,
 }
 
 impl Imdb {
-    pub fn new() -> Imdb {
-        Imdb {
-            kv_store: HashMap::new(),
-        }
+    pub fn new(config: ImdbConfig) -> Result<Imdb, String> {
+        let db_dir_path = Path::new(&config.db_path);
+        Imdb::init_db_directory(db_dir_path)?;
+
+        let storage = ImdbInlineMetaDataStorage::new(db_dir_path)?;
+
+        let db = Imdb { config, storage };
+        Ok(db)
     }
 
-    pub fn execute_command(&mut self, command: Vec<u8>) -> Result<Option<&Vec<u8>>, String> {
+    pub fn execute_command(&mut self, command: Vec<u8>) -> Result<Option<Vec<u8>>, String> {
         let (command, _, args) = ImdbCommand::parse(&command)?;
         match command {
             ImdbCommand::Insert => {
@@ -29,7 +36,11 @@ impl Imdb {
             }
             ImdbCommand::Get => {
                 let value = self.handle_get_command(args)?;
-                return Ok(value);
+                if let Some(record) = value {
+                    Ok(Some(record.value))
+                } else {
+                    Ok(None)
+                }
             }
             ImdbCommand::Delete => {
                 return Ok(None);
@@ -40,14 +51,27 @@ impl Imdb {
     fn handle_insert_command(&mut self, args: Vec<&[u8]>) -> Result<(), String> {
         let insert_command_args = ImdbInsertCommandArgs::parse(args)?;
         let mut insert_command = ImdbInsertCommand::new(self);
-        insert_command.execute_command(insert_command_args);
+        insert_command.execute_command(insert_command_args)?;
         Ok(())
     }
 
-    fn handle_get_command(&self, args: Vec<&[u8]>) -> Result<Option<&Vec<u8>>, String> {
+    fn handle_get_command(&mut self, args: Vec<&[u8]>) -> Result<Option<ImdbRecord>, String> {
         let insert_command_args = ImdbGetCommandArgs::parse(args)?;
-        let get_command = ImdbGetCommand::new(self);
-        let val = get_command.execute_command(insert_command_args);
+        let mut get_command = ImdbGetCommand::new(self);
+        let val = get_command.execute_command(insert_command_args)?;
         return Ok(val);
+    }
+
+    // creates directory (with all of its missing parents)
+    // if directory already exists, no changes occur
+    fn init_db_directory(dir_path: &Path) -> Result<(), String> {
+        std::fs::create_dir_all(dir_path).map_err(|err| {
+            let fmt_error = format!(
+                "[Imdb Directory]: error happend while createing Imdb directory {} ",
+                err
+            );
+            fmt_error
+        })?;
+        Ok(())
     }
 }
