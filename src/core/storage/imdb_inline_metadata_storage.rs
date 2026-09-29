@@ -1,11 +1,8 @@
 use std::path::Path;
 
 use crate::core::{
-    index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
-    record::imdb_record::{ImdbRecord, ImdbRecordKey, ImdbRecordMetaData},
-    storage::{
-        imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
-        imdb_inline_metadata_writer::ImdbInlineMetaDataWriter, pager::ImdbRecordPager,
+    index::imdb_memory_only_index::ImdbMemoryOnlyIndex, record::imdb_record::{ImdbRecord, ImdbRecordKey, ImdbRecordMetaData}, storage::{
+        imdb_inline_metadata_pager::ImdbInlineMetaDataPager, imdb_inline_metadata_writer::ImdbInlineMetaDataWriter, pager::ImdbRecordPager, writer::ImdbRecordWriter,
     },
 };
 
@@ -70,6 +67,7 @@ impl ImdbInlineMetaDataStorage {
     pub fn write_record(&mut self, record: ImdbRecord) -> Result<(), String> {
         let metadata = ImdbRecordMetaData::from(&record);
         let storage_entry = self.writer.write_record(&metadata, &record)?;
+        self.writer.sync()?;
         self.index
             .write_record(record.key, storage_entry.identfying_offset);
         Ok(())
