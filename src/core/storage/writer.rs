@@ -19,4 +19,6 @@ pub trait ImdbRecordWriter {
         metadata: &ImdbRecordMetaData,
         record: &ImdbRecord,
     ) -> Result<ImdbStorageEntry, String>;
+
+    fn sync(&mut self) -> Result<(), String>;
 }

@@ -31,7 +31,7 @@ impl ImdbInlineMetaDataWriter {
         return Ok(writer);
     }
 
-    pub fn write_record_and_flush(
+    pub fn write_record(
         &mut self,
         metadata: &ImdbRecordMetaData,
         record: &ImdbRecord,
@@ -51,6 +51,18 @@ impl ImdbInlineMetaDataWriter {
             let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
             return fmt_error;
         })?;
+        let storage_entry = ImdbStorageEntry {
+            record_offset,
+            metadata_offset,
+            identfying_offset: metadata_offset,
+        };
+        Ok(storage_entry)
+    }
+
+    // flush content to os-page cache
+    // fsync to sync os-page cache pages with disk
+    // suffers from "fsync-gate" problem (since we are not using direct-IO)
+    pub fn flush_and_fsync(&mut self) -> Result<(), String> {
         self.writer.flush().map_err(|err| {
             let fmt_error = format!(
                 "[Imdb Writer Flushing Error happened while flushing record]: {}",
@@ -58,12 +70,11 @@ impl ImdbInlineMetaDataWriter {
             );
             return fmt_error;
         })?;
-        let storage_entry = ImdbStorageEntry {
-            record_offset,
-            metadata_offset,
-            identfying_offset: metadata_offset,
-        };
-        Ok(storage_entry)
+        self.writer.sync_all().map_err(|err| {
+            let fmt_error = format!("[Imdb Writer fsync Error happened]: {}", err);
+            return fmt_error;
+        })?;
+        Ok(())
     }
 }
 
@@ -73,13 +84,18 @@ impl ImdbRecordWriter for ImdbInlineMetaDataWriter {
         metadata: &ImdbRecordMetaData,
         record: &ImdbRecord,
     ) -> Result<ImdbStorageEntry, String> {
-        self.write_record_and_flush(metadata, record)
+        self.write_record(metadata, record)
+    }
+
+    fn sync(&mut self) -> Result<(), String> {
+        self.flush_and_fsync()?;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{fs::OpenOptions, path::Path};
+    use std::path::Path;
 
     use crate::core::{
         mocking_utils::{

@@ -51,6 +51,10 @@ where
         }
         return Result::Ok(Option::None);
     }
+
+    pub fn write_record(&mut self, key: ImdbRecordKey, offset: Offset) {
+        self.kv_offset_index.insert(key, offset);
+    }
 }
 
 #[cfg(test)]
