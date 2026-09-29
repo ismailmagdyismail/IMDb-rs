@@ -33,9 +33,15 @@ impl ImdbMemoryOnlyIndex {
         return Ok(());
     }
 
-    // todo
-    // pub fn read_record_offset(&mut self, key: &ImdbRecordKey) {}
+    pub fn read_record_offset(&mut self, key: &ImdbRecordKey) -> Option<&u64> {
+        self.kv_offset_index.get(key)
+    }
 
+    // depricated
+    // couples access to offset with fetching record
+    // use "read_record_offset" api for more granularity
+    // callers may have result cached in some BufferPool so this couples index with disk access
+    // up tp caller to coordinate that
     pub fn read_record<T>(
         &mut self,
         key: &ImdbRecordKey,

@@ -5,7 +5,7 @@ use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordKey, ImdbRecordMetaData},
     storage::{
         imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
-        imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+        imdb_inline_metadata_writer::ImdbInlineMetaDataWriter, pager::ImdbRecordPager,
     },
 };
 
@@ -76,10 +76,23 @@ impl ImdbInlineMetaDataStorage {
     }
 
     pub fn read_record(&mut self, key: ImdbRecordKey) -> Result<Option<ImdbRecord>, String> {
-        let record = self.index.read_record(&key, &mut self.pager)?;
-        if let Some(record) = record {
-            return Result::Ok(Option::Some(record));
+        let offset = self.index.read_record_offset(&key);
+        let offset = if let Some(offset) = offset {
+            offset
+        } else {
+            // record not found in index, then doesn't exist
+            return Ok(None);
+        };
+        let storage_record = self
+            .pager
+            .load_specific_record_and_meta_data_using_id_offset(*offset)?;
+        if let Some(storage_record) = storage_record {
+            Result::Ok(Some(storage_record.record))
+        } else {
+            // record found in index, but not on disk !!
+            // this means in-consistency between index, on disk storage
+            let fmt_error = format!("[Imdb Storage Error]: record  found in index, not on Disk");
+            Result::Err(fmt_error)
         }
-        return Result::Ok(None);
     }
 }
