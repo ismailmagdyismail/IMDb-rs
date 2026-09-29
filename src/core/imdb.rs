@@ -37,7 +37,7 @@ impl Imdb {
             ImdbCommand::Get => {
                 let value = self.handle_get_command(args)?;
                 if let Some(record) = value {
-                    Ok(Some(record.key))
+                    Ok(Some(record.value))
                 } else {
                     Ok(None)
                 }
