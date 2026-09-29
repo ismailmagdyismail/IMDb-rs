@@ -5,30 +5,25 @@ use crate::core::{
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct ImdbMemoryOnlyIndex<T>
-where
-    T: ImdbRecordPager,
-{
+pub struct ImdbMemoryOnlyIndex {
     kv_offset_index: HashMap<ImdbRecordKey, Offset>,
-    index_pager: T,
 }
 
-impl<T> ImdbMemoryOnlyIndex<T>
-where
-    T: ImdbRecordPager,
-{
-    pub fn new(index_pager: T) -> Result<ImdbMemoryOnlyIndex<T>, String> {
+impl ImdbMemoryOnlyIndex {
+    pub fn new() -> Result<ImdbMemoryOnlyIndex, String> {
         let index = ImdbMemoryOnlyIndex {
             kv_offset_index: HashMap::new(),
-            index_pager,
         };
 
         Ok(index)
     }
 
-    pub fn load_all_index(&mut self) -> Result<(), String> {
+    pub fn load_all_index<T>(&mut self, pager: &mut T) -> Result<(), String>
+    where
+        T: ImdbRecordPager,
+    {
         loop {
-            if let Some(storage_entry) = self.index_pager.load_next_record_and_metadata()? {
+            if let Some(storage_entry) = pager.load_next_record_and_metadata()? {
                 self.kv_offset_index
                     .insert(storage_entry.record.key, storage_entry.identfying_offset);
             } else {
@@ -38,14 +33,22 @@ where
         return Ok(());
     }
 
-    pub fn read_record(&mut self, key: &ImdbRecordKey) -> Result<Option<ImdbRecord>, String> {
+    // todo
+    // pub fn read_record_offset(&mut self, key: &ImdbRecordKey) {}
+
+    pub fn read_record<T>(
+        &mut self,
+        key: &ImdbRecordKey,
+        pager: &mut T,
+    ) -> Result<Option<ImdbRecord>, String>
+    where
+        T: ImdbRecordPager,
+    {
         let offset = match self.kv_offset_index.get(key) {
             Some(offset) => offset,
             None => return Result::Ok(Option::None),
         };
-        let storage_record = self
-            .index_pager
-            .load_specific_record_and_meta_data_using_id_offset(*offset)?;
+        let storage_record = pager.load_specific_record_and_meta_data_using_id_offset(*offset)?;
         if let Option::Some(storage_record) = storage_record {
             return Result::Ok(Option::Some(storage_record.record));
         }
@@ -72,9 +75,9 @@ mod test {
     fn test_populating_whole_index() {
         let index_path: &Path = Path::new("memory_only_index_populating_test.bin");
         write_mock_records(&index_path, 100);
-        let pager = ImdbInlineMetaDataPager::new(&index_path).unwrap();
-        let mut index = ImdbMemoryOnlyIndex::new(pager).unwrap();
-        index.load_all_index().unwrap();
+        let mut pager = ImdbInlineMetaDataPager::new(&index_path).unwrap();
+        let mut index = ImdbMemoryOnlyIndex::new().unwrap();
+        index.load_all_index(&mut pager).unwrap();
         assert_eq!(index.kv_offset_index.keys().count(), 100);
     }
 
@@ -84,15 +87,15 @@ mod test {
         let iteartion = 100;
         write_mock_records(path, iteartion);
 
-        let pager = ImdbInlineMetaDataPager::new(path).unwrap();
-        let mut index = ImdbMemoryOnlyIndex::new(pager).unwrap();
+        let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
+        let mut index = ImdbMemoryOnlyIndex::new().unwrap();
         // populate all of the index
-        index.load_all_index().unwrap();
+        index.load_all_index(&mut pager).unwrap();
 
         // test existing record
         let (key, value) = create_kv_entry(1);
         let key = key.into_bytes().to_owned();
-        let record = index.read_record(&key).unwrap();
+        let record = index.read_record(&key, &mut pager).unwrap();
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, key);
@@ -101,7 +104,7 @@ mod test {
         // test not existing record
         let (key, _) = create_kv_entry(iteartion + 10);
         let key = key.into_bytes().to_owned();
-        let record = index.read_record(&key).unwrap();
+        let record = index.read_record(&key, &mut pager).unwrap();
         assert!(record.is_none());
     }
 }

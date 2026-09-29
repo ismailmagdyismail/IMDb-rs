@@ -4,3 +4,4 @@ pub mod pager;
 pub mod buffer_helpers;
 pub mod writer;
 pub mod imdb_inline_metadata_writer;
+pub mod imdb_inline_metadata_storage;

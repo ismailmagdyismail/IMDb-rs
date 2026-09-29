@@ -1,17 +1,22 @@
-use crate::core::{imdb::Imdb, imdb_errors::error_message_formatter};
+use crate::core::{
+    imdb::Imdb, imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+};
 
 pub struct ImdbGetCommand<'a> {
-    imdb: &'a Imdb,
+    imdb: &'a mut Imdb,
 }
 
 impl<'a> ImdbGetCommand<'a> {
-    pub fn new(imdb: &'a Imdb) -> ImdbGetCommand<'a> {
+    pub fn new(imdb: &'a mut Imdb) -> ImdbGetCommand<'a> {
         ImdbGetCommand { imdb }
     }
 
-    pub fn execute_command(&self, command_args: ImdbGetCommandArgs) -> Option<&'a Vec<u8>> {
-        let value = self.imdb.kv_store.get(command_args.key);
-        return value;
+    pub fn execute_command(
+        &mut self,
+        command_args: ImdbGetCommandArgs,
+    ) -> Result<Option<ImdbRecord>, String> {
+        let record = self.imdb.storage.read_record(command_args.key.to_vec())?;
+        Ok(record)
     }
 }
 
