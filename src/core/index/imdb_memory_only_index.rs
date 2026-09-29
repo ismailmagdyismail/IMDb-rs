@@ -49,7 +49,8 @@ where
         if let Option::Some(storage_record) = storage_record {
             return Result::Ok(Option::Some(storage_record.record));
         }
-        return Result::Ok(Option::None);
+        let fmt_error = format!("[Imdb Index Error]: record  found in index, not on Disk");
+        return Result::Err(fmt_error);
     }
 
     pub fn write_record(&mut self, key: ImdbRecordKey, offset: Offset) {
