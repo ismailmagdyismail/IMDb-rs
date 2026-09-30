@@ -10,3 +10,4 @@ pub mod serdes;
 pub mod storage;
 pub mod index;
 pub mod mocking_utils;
+pub mod checksum;
