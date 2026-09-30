@@ -4,8 +4,10 @@ use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
-        imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
-        imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+        imdb_inline_metadata_storage_engine::{
+            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+            imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+        },
         pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
         writer::{ImdbRecordWriter, ImdbStorageEntry},
     },

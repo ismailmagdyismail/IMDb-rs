@@ -5,7 +5,7 @@ use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
-        imdb_inline_metadata_disk_manager::ImdbInlineMetaDataDiskManager,
+        imdb_inline_metadata_storage_engine::imdb_inline_metadata_disk_manager::ImdbInlineMetaDataDiskManager,
     },
 };
 
