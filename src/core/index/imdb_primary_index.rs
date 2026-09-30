@@ -6,13 +6,13 @@ use crate::core::{
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct ImdbMemoryOnlyIndex {
+pub struct ImdbPrimaryIndex {
     kv_offset_index: HashMap<ImdbRecordKey, Offset>,
 }
 
-impl ImdbMemoryOnlyIndex {
-    pub fn new() -> Result<ImdbMemoryOnlyIndex, String> {
-        let index = ImdbMemoryOnlyIndex {
+impl ImdbPrimaryIndex {
+    pub fn new() -> Result<ImdbPrimaryIndex, String> {
+        let index = ImdbPrimaryIndex {
             kv_offset_index: HashMap::new(),
         };
 
@@ -53,7 +53,7 @@ impl ImdbMemoryOnlyIndex {
     }
 }
 
-impl ImdbIndexWriter for ImdbMemoryOnlyIndex {
+impl ImdbIndexWriter for ImdbPrimaryIndex {
     fn cache_record(&mut self, storage_entry: ImdbRecordMetadataStorageEntry) {
         self.write_record(storage_entry.record.key, storage_entry.identfying_offset);
     }
@@ -64,7 +64,7 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
-        index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
+        index::imdb_primary_index::ImdbPrimaryIndex,
         mocking_utils::records_paging::{create_kv_entry, write_mock_records},
         storage::{
             imdb_inline_metadata_storage_engine::{
@@ -89,7 +89,7 @@ mod test {
         write_mock_records(&db_data_file, iterations, &mut encode_record);
 
         let mut disk_manager = ImdbInlineMetaDataDiskManager::new(db_dir).unwrap();
-        let mut index = ImdbMemoryOnlyIndex::new().unwrap();
+        let mut index = ImdbPrimaryIndex::new().unwrap();
         let recovery_manager = RecoveryManager {};
 
         recovery_manager

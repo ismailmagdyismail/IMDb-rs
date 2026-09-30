@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::core::{
-    index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
+    index::imdb_primary_index::ImdbPrimaryIndex,
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
@@ -23,7 +23,7 @@ use crate::core::{
 */
 pub struct ImdbStorageEngine {
     disk_manager: ImdbInlineMetaDataDiskManager,
-    index: ImdbMemoryOnlyIndex,
+    index: ImdbPrimaryIndex,
     recovery_manager: RecoveryManager,
 }
 
@@ -31,7 +31,7 @@ impl ImdbStorageEngine {
     pub fn new(storage_path: &Path) -> Result<ImdbStorageEngine, String> {
         ImdbStorageEngine::init_storage_directory(storage_path)?;
         let disk_manager = ImdbInlineMetaDataDiskManager::new(storage_path)?;
-        let index = ImdbMemoryOnlyIndex::new()?;
+        let index = ImdbPrimaryIndex::new()?;
         let recovery_manager = RecoveryManager {};
         let mut storage_engine: ImdbStorageEngine = ImdbStorageEngine {
             disk_manager,
