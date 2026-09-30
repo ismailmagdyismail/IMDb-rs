@@ -56,11 +56,7 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
             .load_specific_record_and_meta_data_using_id_offset(offset);
     }
 
-    fn reader(&mut self) -> &mut Self::Reader {
-        &mut self.pager
-    }
-
-    fn writer(&mut self) -> &mut Self::Writer {
-        &mut self.writer
+    fn read_next_record(&mut self) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+        self.pager.load_next_record_and_metadata()
     }
 }

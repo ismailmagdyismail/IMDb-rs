@@ -57,6 +57,7 @@ pub fn write_records<T>(
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();
+    buf_writer.into_inner().unwrap().sync_all().unwrap();
 }
 
 pub fn write_mock_records<T>(file_path: &Path, records_count: usize, formatter_callback: &mut T)
@@ -82,6 +83,7 @@ where
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();
+    buf_writer.into_inner().unwrap().sync_all().unwrap();
 }
 
 pub fn verify_record(iteration: usize, record: &ImdbRecord) -> bool {

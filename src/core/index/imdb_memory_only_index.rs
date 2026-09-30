@@ -1,6 +1,7 @@
 use crate::core::{
+    index::imdb_index::ImdbIndexWriter,
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
-    storage::pager::{ImdbRecordPager, Offset},
+    storage::pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
 };
 use std::collections::HashMap;
 
@@ -16,21 +17,6 @@ impl ImdbMemoryOnlyIndex {
         };
 
         Ok(index)
-    }
-
-    pub fn load_all_index<T>(&mut self, pager: &mut T) -> Result<(), String>
-    where
-        T: ImdbRecordPager,
-    {
-        loop {
-            if let Some(storage_entry) = pager.load_next_record_and_metadata()? {
-                self.kv_offset_index
-                    .insert(storage_entry.record.key, storage_entry.identfying_offset);
-            } else {
-                break;
-            }
-        }
-        return Ok(());
     }
 
     pub fn read_record_offset(&mut self, key: &ImdbRecordKey) -> Option<&u64> {
@@ -67,6 +53,12 @@ impl ImdbMemoryOnlyIndex {
     }
 }
 
+impl ImdbIndexWriter for ImdbMemoryOnlyIndex {
+    fn cache_record(&mut self, storage_entry: ImdbRecordMetadataStorageEntry) {
+        self.write_record(storage_entry.record.key, storage_entry.identfying_offset);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::path::Path;
@@ -74,46 +66,40 @@ mod test {
     use crate::core::{
         index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
         mocking_utils::records_paging::{create_kv_entry, write_mock_records},
-        storage::imdb_inline_metadata_storage_engine::{
-            imdb_inline_metadata_format::encode_record,
-            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+        storage::{
+            imdb_inline_metadata_storage_engine::{
+                imdb_inline_metadata_disk_manager::{
+                    IMDB_INLINE_METADATA_RECORDS_FILE_NAME, ImdbInlineMetaDataDiskManager,
+                },
+                imdb_inline_metadata_format::encode_record,
+            },
+            imdb_recovery_manager::RecoveryManager,
         },
     };
 
     #[test]
     fn test_populating_whole_index() {
-        let index_path: &Path = Path::new("memory_only_index_populating_test.bin");
-        write_mock_records(&index_path, 100, &mut encode_record);
-        let mut pager = ImdbInlineMetaDataPager::new(&index_path).unwrap();
+        let db_dir = Path::new("memory_only_index_populating_test");
+        std::fs::create_dir_all(db_dir).unwrap();
+        let mut db_data_file = db_dir.to_path_buf();
+        db_data_file.push(IMDB_INLINE_METADATA_RECORDS_FILE_NAME);
+        let db_data_file = Path::new(&db_data_file);
+
+        let iterations = 100;
+        write_mock_records(&db_data_file, iterations, &mut encode_record);
+
+        let mut disk_manager = ImdbInlineMetaDataDiskManager::new(db_dir).unwrap();
         let mut index = ImdbMemoryOnlyIndex::new().unwrap();
-        index.load_all_index(&mut pager).unwrap();
-        assert_eq!(index.kv_offset_index.keys().count(), 100);
-    }
+        let recovery_manager = RecoveryManager {};
 
-    #[test]
-    fn test_random_index_read() {
-        let path = Path::new("memory_only_index_random_read_test.bin");
-        let iteartion = 100;
-        write_mock_records(path, iteartion, &mut encode_record);
-
-        let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
-        let mut index = ImdbMemoryOnlyIndex::new().unwrap();
-        // populate all of the index
-        index.load_all_index(&mut pager).unwrap();
-
-        // test existing record
-        let (key, value) = create_kv_entry(1);
-        let key = key.into_bytes().to_owned();
-        let record = index.read_record(&key, &mut pager).unwrap();
-        assert!(record.is_some());
-        let record = record.unwrap();
-        assert_eq!(record.key, key);
-        assert_eq!(record.value, value.into_bytes().to_owned());
-
-        // test not existing record
-        let (key, _) = create_kv_entry(iteartion + 10);
-        let key = key.into_bytes().to_owned();
-        let record = index.read_record(&key, &mut pager).unwrap();
-        assert!(record.is_none());
+        recovery_manager
+            .recover(&mut disk_manager, &mut index)
+            .unwrap();
+        assert_eq!(index.kv_offset_index.len(), iterations);
+        for i in 0..iterations {
+            let (key, _) = create_kv_entry(i);
+            let offset = index.read_record_offset(&key.into_bytes());
+            assert!(offset.is_some());
+        }
     }
 }

@@ -50,6 +50,11 @@ pub trait ImdbDiskRecordsManager {
         offset: Offset,
     ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String>;
 
-    fn reader(&mut self) -> &mut Self::Reader;
-    fn writer(&mut self) -> &mut Self::Writer;
+    fn read_next_record(&mut self) -> Result<Option<ImdbRecordMetadataStorageEntry>, String>;
+
+    // a More generic, better API I think 
+    // returns a cursor / Iterator like
+    // thread safe, since read only cursor
+    // can iterate over records as needed by caller
+    // fn create_scan_cursor()
 }
