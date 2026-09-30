@@ -5,6 +5,7 @@ edition = "2024"
 default-run="imdb"
 
 [dependencies]
+crc = "3.4.0"
 
 [[bin]]
 name = "exp"
