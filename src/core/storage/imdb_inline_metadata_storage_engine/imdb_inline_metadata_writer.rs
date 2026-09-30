@@ -19,7 +19,7 @@ pub struct ImdbInlineMetaDataWriter {
 impl ImdbInlineMetaDataWriter {
     pub fn new(file_path: &Path) -> Result<ImdbInlineMetaDataWriter, String> {
         let mut options = OpenOptions::new();
-        let file = options
+        let mut file = options
             .write(true)
             .append(true)
             .open(file_path)
@@ -27,6 +27,13 @@ impl ImdbInlineMetaDataWriter {
                 let formatted_record = format!("[Imdb File Writer error]: {}", err);
                 return formatted_record;
             })?;
+        file.seek(std::io::SeekFrom::End(0)).map_err(|err| {
+            let fmt_error = format!(
+                "[Imdb Writer Error]: couldn't seek to the end of the file {}",
+                err
+            );
+            fmt_error
+        })?;
         let writer = ImdbInlineMetaDataWriter { writer: file };
         return Ok(writer);
     }
@@ -99,7 +106,9 @@ mod test {
 
     use crate::core::{
         mocking_utils::{
-            inline_metadata_mocking_utils::find_record_offset,
+            inline_metadata_mocking_utils::{
+                find_record_offset, find_record_offset_with_starting_offset,
+            },
             records_paging::{create_records, create_writer_file},
         },
         record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
@@ -148,6 +157,39 @@ mod test {
             assert_eq!(storage_entry.identfying_offset, metadata_offset);
             assert_eq!(storage_entry.metadata_offset, metadata_offset);
             assert_eq!(storage_entry.record_offset, record_offset);
+        }
+    }
+
+    #[test]
+    fn test_writing_in_already_populated_file() {
+        let file_path = "inline_metadata_already_populated_file_writer.bin";
+        create_writer_file(file_path);
+
+        let mut last_offset = 0;
+        {
+            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+            let records = create_records(100);
+            for (i, (record, metadata)) in records.iter().enumerate() {
+                let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
+                let (metadata_offset, record_offset) = find_record_offset(&records, i);
+                assert_eq!(storage_entry.identfying_offset, metadata_offset);
+                assert_eq!(storage_entry.metadata_offset, metadata_offset);
+                assert_eq!(storage_entry.record_offset, record_offset);
+                last_offset = record_offset + record.ser_size() as u64;
+            }
+        }
+
+        {
+            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+            let records = create_records(100);
+            for (i, (record, metadata)) in records.iter().enumerate() {
+                let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
+                let (metadata_offset, record_offset) =
+                    find_record_offset_with_starting_offset(&records, i, last_offset);
+                assert_eq!(storage_entry.identfying_offset, metadata_offset);
+                assert_eq!(storage_entry.metadata_offset, metadata_offset);
+                assert_eq!(storage_entry.record_offset, record_offset);
+            }
         }
     }
 }

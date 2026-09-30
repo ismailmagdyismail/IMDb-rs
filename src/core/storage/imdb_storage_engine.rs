@@ -172,6 +172,42 @@ mod test {
     }
 
     #[test]
+    fn test_updates_to_same_key() {
+        let path = create_test_dir("update_same_keys");
+        let mut storage_engine: ImdbStorageEngine =
+            ImdbStorageEngine::new(Path::new(&path)).unwrap();
+        let records = create_records(1);
+        for (record, _) in records {
+            let res = storage_engine.write_record(record);
+            assert!(res.is_ok());
+            res.unwrap();
+        }
+
+        // update
+        let records = create_records(1);
+        for (i, (mut record, _)) in records.into_iter().enumerate() {
+            let (_, val) = create_kv_entry(i);
+            record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.write_record(record);
+            assert!(res.is_ok());
+            res.unwrap();
+        }
+
+        // read
+        let records_clone = create_records(1);
+        for (i, (mut record, _)) in records_clone.into_iter().enumerate() {
+            let (_, val) = create_kv_entry(i);
+            record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.read_record(record.key.clone());
+            assert!(res.is_ok());
+            let read_record = res.unwrap();
+            assert!(read_record.is_some());
+            let read_record = read_record.unwrap();
+            verify_read_record(&record, &read_record);
+        }
+    }
+
+    #[test]
     fn test_write_destruct_load_read_update_read() {
         let path = create_test_dir("write_then_read_after_load");
 
@@ -220,22 +256,6 @@ mod test {
             let read_record = res.unwrap();
             assert!(read_record.is_some());
             let read_record = read_record.unwrap();
-            println!(
-                "read key:: {}",
-                String::from_utf8(read_record.key.clone()).unwrap()
-            );
-            println!(
-                "actual key:: {}",
-                String::from_utf8(record.key.clone()).unwrap()
-            );
-            println!(
-                "read value:: {}",
-                String::from_utf8(read_record.value.clone()).unwrap()
-            );
-            println!(
-                "actual value:: {}",
-                String::from_utf8(record.value.clone()).unwrap()
-            );
             verify_read_record(&record, &read_record);
         }
     }
