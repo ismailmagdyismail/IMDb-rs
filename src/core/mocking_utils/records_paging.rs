@@ -1,7 +1,4 @@
-use crate::core::{
-    record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
-    storage::imdb_inline_metadata_format::encode_record,
-};
+use crate::core::record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData};
 use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
@@ -35,7 +32,13 @@ pub fn create_records(records_count: usize) -> Vec<(ImdbRecord, ImdbRecordMetaDa
     return vec;
 }
 
-pub fn write_records(records: &Vec<(ImdbRecord, ImdbRecordMetaData)>, file_path: &Path) {
+pub fn write_records<T>(
+    records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
+    file_path: &Path,
+    formatter_callback: &mut T,
+) where
+    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), String>,
+{
     let mut options = OpenOptions::new();
     let file = options
         .create(true)
@@ -50,13 +53,16 @@ pub fn write_records(records: &Vec<(ImdbRecord, ImdbRecordMetaData)>, file_path:
             HEADER_SIZE as usize + metadata.key_len as usize + metadata.val_len as usize,
             b'0',
         );
-        encode_record(&record, &metadata, buffer.as_mut_slice()).unwrap();
+        formatter_callback(&record, &metadata, buffer.as_mut_slice()).unwrap();
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();
 }
 
-pub fn write_mock_records(file_path: &Path, records_count: usize) {
+pub fn write_mock_records<T>(file_path: &Path, records_count: usize, formatter_callback: &mut T)
+where
+    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), String>,
+{
     let mut options = OpenOptions::new();
     let file = options
         .create(true)
@@ -72,7 +78,7 @@ pub fn write_mock_records(file_path: &Path, records_count: usize) {
             HEADER_SIZE as usize + meta_data.key_len as usize + meta_data.val_len as usize,
             b'0',
         );
-        encode_record(&record, &meta_data, buffer.as_mut_slice()).unwrap();
+        formatter_callback(&record, &meta_data, buffer.as_mut_slice()).unwrap();
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();

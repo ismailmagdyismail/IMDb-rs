@@ -11,7 +11,9 @@ use crate::core::{
             advance_internal_buffer_cursor_by_metadata,
             advance_internal_buffer_cursor_by_record_payload,
         },
-        imdb_inline_metadata_format::{decode_metadata, decode_record_payload},
+        imdb_inline_metadata_storage_engine::imdb_inline_metadata_format::{
+            decode_metadata, decode_record_payload,
+        },
         pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
     },
 };
@@ -300,7 +302,10 @@ mod test {
         },
         record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
         storage::{
-            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+            imdb_inline_metadata_storage_engine::{
+                imdb_inline_metadata_format::encode_record,
+                imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+            },
             pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager},
         },
     };
@@ -309,7 +314,7 @@ mod test {
     pub fn test_loading_records() {
         let file_path = Path::new("inline_metadata_pager_loading_test.bin");
         let records_count = 100;
-        write_mock_records(file_path, records_count);
+        write_mock_records(file_path, records_count, &mut encode_record);
 
         let mut pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
         let mut loaded_records_count = 0;
@@ -330,7 +335,7 @@ mod test {
     pub fn test_loading_iterator() {
         let file_path = Path::new("inline_metadata_pager_iterator.bin");
         let records_count = 100;
-        write_mock_records(file_path, records_count);
+        write_mock_records(file_path, records_count, &mut encode_record);
 
         let pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
 
@@ -417,7 +422,7 @@ mod test {
             },
         ));
         let path = Path::new("inline_metadata_pager_random_read.bin");
-        write_records(&records, path);
+        write_records(&records, path, &mut encode_record);
 
         let mut pager = ImdbInlineMetaDataPager::new(&path).unwrap();
 
@@ -451,7 +456,7 @@ mod test {
             },
         ));
 
-        write_records(&records, path);
+        write_records(&records, path, &mut encode_record);
 
         let storage_record = pager.load_next_record_and_metadata().unwrap();
         assert!(storage_record.is_some());
@@ -505,7 +510,7 @@ mod test {
             },
         ));
 
-        write_records(&records, path);
+        write_records(&records, path, &mut encode_record);
 
         for (i, record) in pager.enumerate() {
             let (metadata_offset, record_offset) = find_record_offset(&records, i);
@@ -563,7 +568,7 @@ mod test {
             },
         ));
 
-        write_records(&records, path);
+        write_records(&records, path, &mut encode_record);
 
         for i in 0..records.len() {
             let (metadata_offset, record_offset) = find_record_offset(&records, i);

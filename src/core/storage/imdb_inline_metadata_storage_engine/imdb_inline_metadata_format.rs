@@ -52,7 +52,9 @@ pub fn decode_record_payload(
 }
 
 // buffer supplied must have a big enough size to accomodate MetaData + Record
-pub fn decode_whole_record(buffer: &[u8]) -> Result<(ImdbRecordMetaData, ImdbRecord, u32, u32), String> {
+pub fn decode_whole_record(
+    buffer: &[u8],
+) -> Result<(ImdbRecordMetaData, ImdbRecord, u32, u32), String> {
     let mut slicer = Slicer::new(buffer);
     let metadata_slice = slicer.next_slice(HEADER_SIZE);
     let (metadata, metadata_size) = decode_metadata(metadata_slice)?;
@@ -94,7 +96,9 @@ pub fn encode_record(
 mod test {
     use crate::core::{
         record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
-        storage::imdb_inline_metadata_format::{decode_whole_record, encode_record},
+        storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_format::{
+            decode_whole_record, encode_record,
+        },
     };
 
     #[test]
@@ -120,7 +124,8 @@ mod test {
         }
 
         for i in 0..100 {
-            let (decoded_metadata, decoded_record, _, _) = decode_whole_record(&buffers[i]).unwrap();
+            let (decoded_metadata, decoded_record, _, _) =
+                decode_whole_record(&buffers[i]).unwrap();
             let actual_meta_data = &records[i].0;
             assert_eq!(decoded_metadata.key_len, actual_meta_data.key_len);
             assert_eq!(decoded_metadata.val_len, actual_meta_data.val_len);

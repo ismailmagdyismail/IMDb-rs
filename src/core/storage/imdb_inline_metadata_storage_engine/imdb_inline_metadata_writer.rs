@@ -7,7 +7,7 @@ use std::{
 use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
     storage::{
-        imdb_inline_metadata_format::encode_record,
+        imdb_inline_metadata_storage_engine::imdb_inline_metadata_format::encode_record,
         writer::{ImdbRecordWriter, ImdbStorageEntry},
     },
 };
@@ -104,7 +104,8 @@ mod test {
         },
         record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::{
-            imdb_inline_metadata_writer::ImdbInlineMetaDataWriter, writer::ImdbRecordWriter,
+            imdb_inline_metadata_storage_engine::imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+            writer::ImdbRecordWriter,
         },
     };
 

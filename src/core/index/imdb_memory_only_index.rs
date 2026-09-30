@@ -74,13 +74,16 @@ mod test {
     use crate::core::{
         index::imdb_memory_only_index::ImdbMemoryOnlyIndex,
         mocking_utils::records_paging::{create_kv_entry, write_mock_records},
-        storage::imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+        storage::imdb_inline_metadata_storage_engine::{
+            imdb_inline_metadata_format::encode_record,
+            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+        },
     };
 
     #[test]
     fn test_populating_whole_index() {
         let index_path: &Path = Path::new("memory_only_index_populating_test.bin");
-        write_mock_records(&index_path, 100);
+        write_mock_records(&index_path, 100, &mut encode_record);
         let mut pager = ImdbInlineMetaDataPager::new(&index_path).unwrap();
         let mut index = ImdbMemoryOnlyIndex::new().unwrap();
         index.load_all_index(&mut pager).unwrap();
@@ -91,7 +94,7 @@ mod test {
     fn test_random_index_read() {
         let path = Path::new("memory_only_index_random_read_test.bin");
         let iteartion = 100;
-        write_mock_records(path, iteartion);
+        write_mock_records(path, iteartion, &mut encode_record);
 
         let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let mut index = ImdbMemoryOnlyIndex::new().unwrap();
