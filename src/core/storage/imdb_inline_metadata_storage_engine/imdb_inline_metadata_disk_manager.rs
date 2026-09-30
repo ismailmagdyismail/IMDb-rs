@@ -33,9 +33,6 @@ impl ImdbInlineMetaDataDiskManager {
 }
 
 impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
-    type Reader = ImdbInlineMetaDataPager;
-    type Writer = ImdbInlineMetaDataWriter;
-
     fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
         let storage_entry = self.writer.append_record(record)?;
         Ok(storage_entry)

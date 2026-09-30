@@ -38,9 +38,6 @@ use crate::core::{
 //
 
 pub trait ImdbDiskRecordsManager {
-    type Reader;
-    type Writer;
-
     fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String>;
 
     fn sync(&mut self) -> Result<(), String>;
@@ -52,7 +49,7 @@ pub trait ImdbDiskRecordsManager {
 
     fn read_next_record(&mut self) -> Result<Option<ImdbRecordMetadataStorageEntry>, String>;
 
-    // a More generic, better API I think 
+    // a More generic, better API I think
     // returns a cursor / Iterator like
     // thread safe, since read only cursor
     // can iterate over records as needed by caller

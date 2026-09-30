@@ -5,6 +5,16 @@ use crate::core::{
     serdes::serdes::{Deserilizer, Serializer},
 };
 
+/*
+- this is somewhat coupled to the underlying storage engine format
+- we cannot easily change the format to use columnar oriented format for example
+- THUS it should be moved out of here to the storage_engine/imdb_inline_format.rs
+- since each storage_engine could decide its own format
+- EX_1: inline_meta data => [checksum, header, payload]
+- EX_2: columnar => [header_0,header_1,header_3] , [payload_0,payload_1,payload_2]
+the current serdes makes an IMPLICIT choice about the underlying engine
+*/
+
 impl ImdbRecord {
     pub fn ser_size(&self) -> u32 {
         return self.key.len() as u32 + self.value.len() as u32;
