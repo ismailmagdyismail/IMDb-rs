@@ -7,7 +7,12 @@ use std::{
 use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
     storage::{
-        imdb_inline_metadata_storage_engine::imdb_inline_metadata_format::encode_record,
+        imdb_inline_metadata_storage_engine::{
+            imdb_inline_metadata_format::encode_record,
+            imdb_inline_metadata_storage_record::{
+                CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
+            },
+        },
         writer::{ImdbRecordWriter, ImdbStorageEntry},
     },
 };
@@ -38,22 +43,20 @@ impl ImdbInlineMetaDataWriter {
         return Ok(writer);
     }
 
-    pub fn write_record(
-        &mut self,
-        metadata: &ImdbRecordMetaData,
-        record: &ImdbRecord,
-    ) -> Result<ImdbStorageEntry, String> {
+    pub fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
+        let metadata = ImdbRecordMetaData::from(record);
         let mut buffer = Vec::new();
         buffer.resize(
-            record.ser_size() as usize + metadata.ser_size() as usize,
+            record.ser_size() as usize + INLINE_STORAGE_RECORD_HEADER_SIZE as usize,
             b'0',
         );
-        encode_record(record, metadata, &mut buffer)?;
-        let metadata_offset = self.writer.stream_position().map_err(|err| {
+        encode_record(record, &metadata, &mut buffer)?;
+        let starting_offset = self.writer.stream_position().map_err(|err| {
             let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
             return fmt_error;
         })?;
-        let record_offset = metadata_offset + metadata.ser_size() as u64;
+        let metadata_offset = starting_offset + CHECK_SUM_SIZE as u64;
+        let record_offset = starting_offset + INLINE_STORAGE_RECORD_HEADER_SIZE as u64;
         self.writer.write_all(&buffer).map_err(|err| {
             let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
             return fmt_error;
@@ -61,7 +64,7 @@ impl ImdbInlineMetaDataWriter {
         let storage_entry = ImdbStorageEntry {
             record_offset,
             metadata_offset,
-            identfying_offset: metadata_offset,
+            identfying_offset: starting_offset,
         };
         Ok(storage_entry)
     }
@@ -86,12 +89,8 @@ impl ImdbInlineMetaDataWriter {
 }
 
 impl ImdbRecordWriter for ImdbInlineMetaDataWriter {
-    fn write_record_and_metadata(
-        &mut self,
-        metadata: &ImdbRecordMetaData,
-        record: &ImdbRecord,
-    ) -> Result<ImdbStorageEntry, String> {
-        self.write_record(metadata, record)
+    fn append_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
+        self.write_record(record)
     }
 
     fn sync(&mut self) -> Result<(), String> {
@@ -111,9 +110,14 @@ mod test {
             },
             records_paging::{create_records, create_writer_file},
         },
-        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+        record::imdb_record::ImdbRecord,
         storage::{
-            imdb_inline_metadata_storage_engine::imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+            imdb_inline_metadata_storage_engine::{
+                imdb_inline_metadata_storage_record::{
+                    CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
+                },
+                imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
+            },
             writer::ImdbRecordWriter,
         },
     };
@@ -133,11 +137,6 @@ mod test {
         let key = "1".as_bytes().to_owned();
         let value = "val".as_bytes().to_owned();
 
-        let metadata = ImdbRecordMetaData {
-            key_len: key.len() as u32,
-            val_len: value.len() as u32,
-            check_sum: 0,
-        };
         let record = ImdbRecord {
             key: key,
             value: value,
@@ -146,13 +145,14 @@ mod test {
         let file_path = create_test_dir_and_test_file("inline_metadata_basic_records_writer");
         create_writer_file(file_path.as_str());
         let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
-        let storage_entry = writer
-            .write_record_and_metadata(&metadata, &record)
-            .unwrap();
+        let storage_entry = writer.append_record(&record).unwrap();
 
         assert_eq!(0u64, storage_entry.identfying_offset);
-        assert_eq!(0, storage_entry.metadata_offset);
-        assert_eq!(0 + metadata.ser_size() as u64, storage_entry.record_offset);
+        assert_eq!(0 + CHECK_SUM_SIZE as u64, storage_entry.metadata_offset);
+        assert_eq!(
+            INLINE_STORAGE_RECORD_HEADER_SIZE as u64,
+            storage_entry.record_offset
+        );
     }
 
     #[test]
@@ -161,11 +161,14 @@ mod test {
         create_writer_file(file_path.as_str());
         let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
         let records = create_records(100);
-        for (i, (record, metadata)) in records.iter().enumerate() {
-            let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
-            let (metadata_offset, record_offset) = find_record_offset(&records, i);
-            assert_eq!(storage_entry.identfying_offset, metadata_offset);
-            assert_eq!(storage_entry.metadata_offset, metadata_offset);
+        for (i, storage_record) in records.iter().enumerate() {
+            let storage_entry = writer.append_record(&storage_record.record).unwrap();
+            let (start_offset, record_offset) = find_record_offset(&records, i);
+            assert_eq!(storage_entry.identfying_offset, start_offset);
+            assert_eq!(
+                storage_entry.metadata_offset,
+                start_offset + CHECK_SUM_SIZE as u64
+            );
             assert_eq!(storage_entry.record_offset, record_offset);
         }
     }
@@ -180,25 +183,31 @@ mod test {
         {
             let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
             let records = create_records(100);
-            for (i, (record, metadata)) in records.iter().enumerate() {
-                let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
-                let (metadata_offset, record_offset) = find_record_offset(&records, i);
-                assert_eq!(storage_entry.identfying_offset, metadata_offset);
-                assert_eq!(storage_entry.metadata_offset, metadata_offset);
+            for (i, storage_record) in records.iter().enumerate() {
+                let storage_entry = writer.append_record(&storage_record.record).unwrap();
+                let (starting_offset, record_offset) = find_record_offset(&records, i);
+                assert_eq!(storage_entry.identfying_offset, starting_offset);
+                assert_eq!(
+                    storage_entry.metadata_offset,
+                    starting_offset + CHECK_SUM_SIZE as u64
+                );
                 assert_eq!(storage_entry.record_offset, record_offset);
-                last_offset = record_offset + record.ser_size() as u64;
+                last_offset = record_offset + storage_record.record.ser_size() as u64;
             }
         }
 
         {
             let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
             let records = create_records(100);
-            for (i, (record, metadata)) in records.iter().enumerate() {
-                let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
-                let (metadata_offset, record_offset) =
+            for (i, storage_record) in records.iter().enumerate() {
+                let storage_entry = writer.append_record(&storage_record.record).unwrap();
+                let (starting_offset, record_offset) =
                     find_record_offset_with_starting_offset(&records, i, last_offset);
-                assert_eq!(storage_entry.identfying_offset, metadata_offset);
-                assert_eq!(storage_entry.metadata_offset, metadata_offset);
+                assert_eq!(storage_entry.identfying_offset, starting_offset);
+                assert_eq!(
+                    storage_entry.metadata_offset,
+                    starting_offset + CHECK_SUM_SIZE as u64
+                );
                 assert_eq!(storage_entry.record_offset, record_offset);
             }
         }

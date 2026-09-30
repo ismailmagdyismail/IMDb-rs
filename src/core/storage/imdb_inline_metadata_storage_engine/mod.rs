@@ -2,3 +2,4 @@ pub mod imdb_inline_metadata_disk_manager;
 pub mod imdb_inline_metadata_format;
 pub mod imdb_inline_metadata_pager;
 pub mod imdb_inline_metadata_writer;
+pub mod imdb_inline_metadata_storage_record;

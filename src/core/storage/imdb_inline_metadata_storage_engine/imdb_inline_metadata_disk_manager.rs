@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::core::{
-    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+    record::imdb_record::ImdbRecord,
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
         imdb_inline_metadata_storage_engine::{
@@ -37,8 +37,7 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
     type Writer = ImdbInlineMetaDataWriter;
 
     fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
-        let metadata = ImdbRecordMetaData::from(record);
-        let storage_entry = self.writer.write_record(&metadata, record)?;
+        let storage_entry = self.writer.append_record(record)?;
         Ok(storage_entry)
     }
 

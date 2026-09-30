@@ -114,8 +114,8 @@ mod test {
         let mut storage_engine: ImdbStorageEngine =
             ImdbStorageEngine::new(Path::new(&path)).unwrap();
         let records = create_records(100);
-        for (record, _) in records {
-            let res = storage_engine.write_record(record);
+        for storage_record in records {
+            let res = storage_engine.write_record(storage_record.record);
             assert!(res.is_ok());
             res.unwrap();
         }
@@ -132,16 +132,18 @@ mod test {
         let mut storage_engine: ImdbStorageEngine =
             ImdbStorageEngine::new(Path::new(&path)).unwrap();
         let records = create_records(100);
-        for (record, _) in records {
-            let res = storage_engine.write_record(record);
+        for storage_record in records {
+            let res = storage_engine.write_record(storage_record.record);
             assert!(res.is_ok());
             res.unwrap();
         }
         let records = create_records(100);
-        for (record, _) in records {
-            let read_record = storage_engine.read_record(record.key.clone()).unwrap();
+        for storage_record in records {
+            let read_record = storage_engine
+                .read_record(storage_record.record.key.clone())
+                .unwrap();
             assert!(read_record.is_some());
-            verify_read_record(&record, &read_record.unwrap());
+            verify_read_record(&storage_record.record, &read_record.unwrap());
         }
     }
 
@@ -153,8 +155,8 @@ mod test {
             let mut storage_engine: ImdbStorageEngine =
                 ImdbStorageEngine::new(Path::new(&path)).unwrap();
             let records = create_records(100);
-            for (record, _) in records {
-                let res = storage_engine.write_record(record);
+            for storage_record in records {
+                let res = storage_engine.write_record(storage_record.record);
                 assert!(res.is_ok());
                 res.unwrap();
             }
@@ -163,11 +165,13 @@ mod test {
         let mut storage_engine: ImdbStorageEngine =
             ImdbStorageEngine::new(Path::new(&path)).unwrap();
         let records_clone = create_records(100);
-        for (record, _) in records_clone {
-            let read_record = storage_engine.read_record(record.key.clone()).unwrap();
+        for storage_record in records_clone {
+            let read_record = storage_engine
+                .read_record(storage_record.record.key.clone())
+                .unwrap();
             assert!(read_record.is_some());
             let read_record = read_record.unwrap();
-            verify_read_record(&record, &read_record);
+            verify_read_record(&storage_record.record, &read_record);
         }
     }
 
@@ -177,33 +181,33 @@ mod test {
         let mut storage_engine: ImdbStorageEngine =
             ImdbStorageEngine::new(Path::new(&path)).unwrap();
         let records = create_records(1);
-        for (record, _) in records {
-            let res = storage_engine.write_record(record);
+        for storage_record in records {
+            let res = storage_engine.write_record(storage_record.record);
             assert!(res.is_ok());
             res.unwrap();
         }
 
         // update
         let records = create_records(1);
-        for (i, (mut record, _)) in records.into_iter().enumerate() {
+        for (i, mut storage_record) in records.into_iter().enumerate() {
             let (_, val) = create_kv_entry(i);
-            record.value = (val + "_updated ").as_bytes().to_vec();
-            let res = storage_engine.write_record(record);
+            storage_record.record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.write_record(storage_record.record);
             assert!(res.is_ok());
             res.unwrap();
         }
 
         // read
         let records_clone = create_records(1);
-        for (i, (mut record, _)) in records_clone.into_iter().enumerate() {
+        for (i, mut storage_record) in records_clone.into_iter().enumerate() {
             let (_, val) = create_kv_entry(i);
-            record.value = (val + "_updated ").as_bytes().to_vec();
-            let res = storage_engine.read_record(record.key.clone());
+            storage_record.record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.read_record(storage_record.record.key.clone());
             assert!(res.is_ok());
             let read_record = res.unwrap();
             assert!(read_record.is_some());
             let read_record = read_record.unwrap();
-            verify_read_record(&record, &read_record);
+            verify_read_record(&storage_record.record, &read_record);
         }
     }
 
@@ -216,8 +220,8 @@ mod test {
             let mut storage_engine: ImdbStorageEngine =
                 ImdbStorageEngine::new(Path::new(&path)).unwrap();
             let records = create_records(100);
-            for (record, _) in records {
-                let res = storage_engine.write_record(record);
+            for storage_record in records {
+                let res = storage_engine.write_record(storage_record.record);
                 assert!(res.is_ok());
                 res.unwrap();
             }
@@ -229,34 +233,36 @@ mod test {
 
         // read
         let records_clone = create_records(100);
-        for (record, _) in records_clone {
-            let read_record = storage_engine.read_record(record.key.clone()).unwrap();
+        for storage_record in records_clone {
+            let read_record = storage_engine
+                .read_record(storage_record.record.key.clone())
+                .unwrap();
             assert!(read_record.is_some());
             let read_record = read_record.unwrap();
-            verify_read_record(&record, &read_record);
+            verify_read_record(&storage_record.record, &read_record);
         }
 
         // update
         let records = create_records(100);
-        for (i, (mut record, _)) in records.into_iter().enumerate() {
+        for (i, mut storage_record) in records.into_iter().enumerate() {
             let (_, val) = create_kv_entry(i);
-            record.value = (val + "_updated ").as_bytes().to_vec();
-            let res = storage_engine.write_record(record);
+            storage_record.record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.write_record(storage_record.record);
             assert!(res.is_ok());
             res.unwrap();
         }
 
         // read again
         let records_clone = create_records(100);
-        for (i, (mut record, _)) in records_clone.into_iter().enumerate() {
+        for (i, mut storage_record) in records_clone.into_iter().enumerate() {
             let (_, val) = create_kv_entry(i);
-            record.value = (val + "_updated ").as_bytes().to_vec();
-            let res = storage_engine.read_record(record.key.clone());
+            storage_record.record.value = (val + "_updated ").as_bytes().to_vec();
+            let res = storage_engine.read_record(storage_record.record.key.clone());
             assert!(res.is_ok());
             let read_record = res.unwrap();
             assert!(read_record.is_some());
             let read_record = read_record.unwrap();
-            verify_read_record(&record, &read_record);
+            verify_read_record(&storage_record.record, &read_record);
         }
     }
 }

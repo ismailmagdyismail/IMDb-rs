@@ -1,7 +1,4 @@
-use crate::core::{
-    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
-    storage::pager::Offset,
-};
+use crate::core::{record::imdb_record::ImdbRecord, storage::pager::Offset};
 
 #[derive(Debug)]
 pub struct ImdbStorageEntry {
@@ -14,9 +11,8 @@ pub struct ImdbStorageEntry {
 }
 
 pub trait ImdbRecordWriter {
-    fn write_record_and_metadata(
+    fn append_record(
         &mut self,
-        metadata: &ImdbRecordMetaData,
         record: &ImdbRecord,
     ) -> Result<ImdbStorageEntry, String>;
 

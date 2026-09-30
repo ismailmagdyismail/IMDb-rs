@@ -15,6 +15,10 @@ impl<'a, B> Slicer<'a, B> {
         }
     }
 
+    pub fn advance(&mut self, slice_size: u32) {
+        self.next_range(slice_size);
+    }
+
     fn next_range(&mut self, slice_size: u32) -> (usize, usize) {
         let offset = self.index;
         let end = offset + slice_size;
