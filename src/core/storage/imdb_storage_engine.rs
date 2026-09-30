@@ -6,6 +6,7 @@ use crate::core::{
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
         imdb_inline_metadata_storage_engine::imdb_inline_metadata_disk_manager::ImdbInlineMetaDataDiskManager,
+        imdb_recovery_manager::RecoveryManager,
     },
 };
 
@@ -23,6 +24,7 @@ use crate::core::{
 pub struct ImdbStorageEngine {
     disk_manager: ImdbInlineMetaDataDiskManager,
     index: ImdbMemoryOnlyIndex,
+    recovery_manager: RecoveryManager,
 }
 
 impl ImdbStorageEngine {
@@ -30,16 +32,19 @@ impl ImdbStorageEngine {
         ImdbStorageEngine::init_storage_directory(storage_path)?;
         let disk_manager = ImdbInlineMetaDataDiskManager::new(storage_path)?;
         let index = ImdbMemoryOnlyIndex::new()?;
+        let recovery_manager = RecoveryManager {};
         let mut storage_engine: ImdbStorageEngine = ImdbStorageEngine {
             disk_manager,
             index,
+            recovery_manager,
         };
         storage_engine.load_all()?;
         Ok(storage_engine)
     }
 
     pub fn load_all(&mut self) -> Result<(), String> {
-        self.index.load_all_index(self.disk_manager.reader())?;
+        self.recovery_manager
+            .recover(&mut self.disk_manager, &mut self.index)?;
         Ok(())
     }
 
