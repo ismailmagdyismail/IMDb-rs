@@ -118,6 +118,16 @@ mod test {
         },
     };
 
+    fn create_test_dir_and_test_file(suffix: &str) -> String {
+        let dir_path = Path::new("inline_metadata_writer_unit_tests");
+        let mut dir_path = dir_path.to_path_buf();
+        dir_path.push(suffix);
+        std::fs::create_dir_all(&dir_path).unwrap();
+        dir_path.add_extension(".bin");
+        let path: String = dir_path.to_str().to_owned().unwrap().to_string();
+        return path;
+    }
+
     #[test]
     fn test_writing_basic_record() {
         let key = "1".as_bytes().to_owned();
@@ -133,9 +143,9 @@ mod test {
             value: value,
         };
 
-        let file_path = "inline_metadata_basic_records_writer.bin";
-        create_writer_file(file_path);
-        let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+        let file_path = create_test_dir_and_test_file("inline_metadata_basic_records_writer");
+        create_writer_file(file_path.as_str());
+        let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
         let storage_entry = writer
             .write_record_and_metadata(&metadata, &record)
             .unwrap();
@@ -147,9 +157,9 @@ mod test {
 
     #[test]
     fn test_writing_multiple_records() {
-        let file_path = "inline_metadata_multiple_records_writer.bin";
-        create_writer_file(file_path);
-        let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+        let file_path = create_test_dir_and_test_file("inline_metadata_multiple_records_writer");
+        create_writer_file(file_path.as_str());
+        let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
         let records = create_records(100);
         for (i, (record, metadata)) in records.iter().enumerate() {
             let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
@@ -162,12 +172,13 @@ mod test {
 
     #[test]
     fn test_writing_in_already_populated_file() {
-        let file_path = "inline_metadata_already_populated_file_writer.bin";
-        create_writer_file(file_path);
+        let file_path =
+            create_test_dir_and_test_file("inline_metadata_already_populated_file_writer");
+        create_writer_file(file_path.as_str());
 
         let mut last_offset = 0;
         {
-            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
             let records = create_records(100);
             for (i, (record, metadata)) in records.iter().enumerate() {
                 let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();
@@ -180,7 +191,7 @@ mod test {
         }
 
         {
-            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(file_path)).unwrap();
+            let mut writer = ImdbInlineMetaDataWriter::new(Path::new(&file_path)).unwrap();
             let records = create_records(100);
             for (i, (record, metadata)) in records.iter().enumerate() {
                 let storage_entry = writer.write_record_and_metadata(metadata, record).unwrap();

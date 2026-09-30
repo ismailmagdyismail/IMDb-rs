@@ -310,9 +310,20 @@ mod test {
         },
     };
 
+    fn create_test_dir_and_test_file(suffix: &str) -> String {
+        let dir_path = Path::new("inline_metadata_pager_unit_tests");
+        let mut dir_path = dir_path.to_path_buf();
+        dir_path.push(suffix);
+        std::fs::create_dir_all(&dir_path).unwrap();
+        dir_path.add_extension(".bin");
+        let path: String = dir_path.to_str().to_owned().unwrap().to_string();
+        return path;
+    }
+
     #[test]
     pub fn test_loading_records() {
-        let file_path = Path::new("inline_metadata_pager_loading_test.bin");
+        let file_path = create_test_dir_and_test_file("loading_test");
+        let file_path = Path::new(&file_path);
         let records_count = 100;
         write_mock_records(file_path, records_count, &mut encode_record);
 
@@ -333,7 +344,8 @@ mod test {
 
     #[test]
     pub fn test_loading_iterator() {
-        let file_path = Path::new("inline_metadata_pager_iterator.bin");
+        let file_path = create_test_dir_and_test_file("iterator");
+        let file_path = Path::new(&file_path);
         let records_count = 100;
         write_mock_records(file_path, records_count, &mut encode_record);
 
@@ -421,7 +433,8 @@ mod test {
                 check_sum: 0,
             },
         ));
-        let path = Path::new("inline_metadata_pager_random_read.bin");
+        let path = create_test_dir_and_test_file("random_read");
+        let path = Path::new(&path);
         write_records(&records, path, &mut encode_record);
 
         let mut pager = ImdbInlineMetaDataPager::new(&path).unwrap();
@@ -437,7 +450,9 @@ mod test {
 
     #[test]
     pub fn test_iterative_read_records_payload_spanning_multiple_buffer_reads() {
-        let path = Path::new("inline_metadata_pager_spanning_multiple_buffers_reads.bin");
+        let path = create_test_dir_and_test_file("spanning_multiple_buffers_reads");
+        let path = Path::new(&path);
+
         let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let buffer_capacity = pager.buf_reader.capacity();
 
@@ -477,7 +492,8 @@ mod test {
 
     #[test]
     pub fn test_iterative_read_metadata_not_fitting_in_buffer() {
-        let path = Path::new("inline_metadata_pager_header_spanning_multiple_buffers_reads.bin");
+        let path = create_test_dir_and_test_file("header_spanning_multiple_buffers_reads");
+        let path = Path::new(&path);
         let pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let buffer_capacity = pager.buf_reader.capacity();
 
@@ -534,8 +550,9 @@ mod test {
 
     #[test]
     pub fn test_random_read_records_payload_spanning_multiple_buffers() {
-        let path =
-            Path::new("inline_metadata_pager_random_reads_spanning_multiple_buffers_reads.bin");
+        let path = create_test_dir_and_test_file("andom_reads_spanning_multiple_buffers_reads");
+        let path = Path::new(&path);
+
         let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let buffer_capacity = pager.buf_reader.capacity();
 
@@ -591,5 +608,16 @@ mod test {
             assert_eq!(storage_record.record.key, records[i].0.key);
             assert_eq!(storage_record.record.value, records[i].0.value);
         }
+    }
+
+    #[test]
+    pub fn test_random_read_at_wrong_offset_at_file_end() {
+        let path = create_test_dir_and_test_file("random_read_at_wron_metadata_offse_at_file_end");
+        let path = Path::new(&path);
+
+        write_mock_records(path, 1, &mut encode_record);
+        let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
+        let res = pager.load_specific_record_and_meta_data_using_id_offset(1);
+        assert!(res.is_err());
     }
 }
