@@ -1,6 +1,9 @@
 use crate::core::{
     record::imdb_record::ImdbRecord,
-    storage::imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset},
+    storage::{
+        imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset},
+        imdb_storage_operations_status::ImdbStorageError,
+    },
 };
 
 // I am not sure yet about the abtraction level here
@@ -35,16 +38,19 @@ use crate::core::{
 //
 
 pub trait ImdbDiskRecordsManager {
-    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String>;
+    fn write_record(
+        &mut self,
+        record: &ImdbRecord,
+    ) -> Result<ImdbStorageWriteEntry, ImdbStorageError>;
 
-    fn sync(&mut self) -> Result<(), String>;
+    fn sync(&mut self) -> Result<(), ImdbStorageError>;
 
     fn read_record_with_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbStorageReadEntry>, String>;
+    ) -> Result<Option<ImdbStorageReadEntry>, ImdbStorageError>;
 
-    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, String>;
+    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, ImdbStorageError>;
 
     // a More generic, better API I think
     // returns a cursor / Iterator like

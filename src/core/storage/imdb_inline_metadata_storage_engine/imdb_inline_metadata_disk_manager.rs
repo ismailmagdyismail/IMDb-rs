@@ -1,15 +1,11 @@
 use std::path::Path;
 
 use crate::core::{
-    record::imdb_record::ImdbRecord,
-    storage::{
-        imdb_disk_records_manager::ImdbDiskRecordsManager,
-        imdb_inline_metadata_storage_engine::{
+    record::imdb_record::ImdbRecord, storage::{
+        imdb_disk_records_manager::ImdbDiskRecordsManager, imdb_inline_metadata_storage_engine::{
             imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
             imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
-        },
-        imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset},
-        pager::ImdbRecordPager,
+        }, imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset}, imdb_storage_operations_status::ImdbStorageError, pager::ImdbRecordPager,
     },
 };
 
@@ -20,7 +16,7 @@ pub struct ImdbInlineMetaDataDiskManager {
 }
 
 impl ImdbInlineMetaDataDiskManager {
-    pub fn new(dir_path: &Path) -> Result<ImdbInlineMetaDataDiskManager, String> {
+    pub fn new(dir_path: &Path) -> Result<ImdbInlineMetaDataDiskManager, ImdbStorageError> {
         let mut file_path = dir_path.to_path_buf();
         file_path.push(IMDB_INLINE_METADATA_RECORDS_FILE_NAME);
         let file_path = Path::new(&file_path);
@@ -33,7 +29,7 @@ impl ImdbInlineMetaDataDiskManager {
 }
 
 impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
-    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String> {
+    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, ImdbStorageError> {
         let inline_metadata_storage_entry = self.writer.write_record(record)?;
         let storage_entry = ImdbStorageWriteEntry {
             identfying_offset: inline_metadata_storage_entry.identfying_offset,
@@ -41,7 +37,7 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
         Ok(storage_entry)
     }
 
-    fn sync(&mut self) -> Result<(), String> {
+    fn sync(&mut self) -> Result<(), ImdbStorageError> {
         self.writer.flush_and_fsync()?;
         Ok(())
     }
@@ -49,7 +45,7 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
     fn read_record_with_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, ImdbStorageError> {
         let read_inline_metadata_storage_entry =
             self.pager.read_specific_record_and_meta_data(offset)?;
         if let Some(read_inline_metadata_storage_entry) = read_inline_metadata_storage_entry {
@@ -63,7 +59,7 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
         }
     }
 
-    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, String> {
+    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, ImdbStorageError> {
         let next_inline_metadata_storage_read_entry = self.pager.load_next_record_and_metadata()?;
         if let Some(next_inline_metadata_storage_read_entry) =
             next_inline_metadata_storage_read_entry

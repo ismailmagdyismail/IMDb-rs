@@ -6,14 +6,17 @@ use crate::core::{
 pub struct ImdbInlineMetaDataStorageReadEntry {
     pub metadata: ImdbRecordMetaData,
     pub record: ImdbRecord,
+    pub checksum: u32,
 
-    pub record_offset: Offset,
+    pub checksum_offset: Offset,
     pub metadata_offset: Offset,
+    pub record_offset: Offset,
 
     pub identfying_offset: Offset,
 }
 
 pub struct ImdbInlineMetaDataStorageWriteEntry {
+    pub checksum_offset: Offset,
     pub record_offset: Offset,
     pub metadata_offset: Offset,
 
