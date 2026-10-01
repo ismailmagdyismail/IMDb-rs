@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::core::{
-    index::imdb_primary_index::ImdbPrimaryIndex,
+    index::{imdb_index::ImdbIndexWriter, imdb_primary_index::ImdbPrimaryIndex},
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
@@ -51,8 +51,7 @@ impl ImdbStorageEngine {
     pub fn write_record(&mut self, record: ImdbRecord) -> Result<(), String> {
         let storage_entry = self.disk_manager.write_record(&record)?;
         self.disk_manager.sync()?;
-        self.index
-            .write_record(record.key, storage_entry.identfying_offset);
+        self.index.cache_record(record, storage_entry);
         Ok(())
     }
 

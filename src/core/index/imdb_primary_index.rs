@@ -1,7 +1,7 @@
 use crate::core::{
     index::imdb_index::ImdbIndexWriter,
-    record::imdb_record::ImdbRecordKey,
-    storage::imdb_storage_entries::{ImdbStorageReadEntry, Offset},
+    record::imdb_record::{ImdbRecord, ImdbRecordKey},
+    storage::imdb_storage_entries::{ImdbStorageWriteEntry, Offset},
 };
 use std::collections::HashMap;
 
@@ -42,8 +42,8 @@ impl ImdbPrimaryIndex {
 }
 
 impl ImdbIndexWriter for ImdbPrimaryIndex {
-    fn cache_record(&mut self, storage_entry: ImdbStorageReadEntry) {
-        self.write_record(storage_entry.record.key, storage_entry.identfying_offset);
+    fn cache_record(&mut self, record: ImdbRecord, storage_write_entry: ImdbStorageWriteEntry) {
+        self.write_record(record.key, storage_write_entry.identfying_offset);
     }
 }
 
