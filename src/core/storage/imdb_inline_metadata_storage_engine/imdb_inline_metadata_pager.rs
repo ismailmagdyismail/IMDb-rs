@@ -315,6 +315,7 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
+        checksum::crc32::Crc32CheckSum,
         mocking_utils::{
             inline_metadata_mocking_utils::find_record_offset,
             records_paging::{verify_record, write_mock_records, write_records},
@@ -349,7 +350,15 @@ mod test {
         let file_path = create_test_dir_and_test_file("loading_test");
         let file_path = Path::new(&file_path);
         let records_count = 100;
-        write_mock_records(file_path, records_count, &mut encode_record);
+        write_mock_records(
+            file_path,
+            records_count,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
         let mut loaded_records_count = 0;
@@ -371,7 +380,15 @@ mod test {
         let file_path = create_test_dir_and_test_file("iterator");
         let file_path = Path::new(&file_path);
         let records_count = 100;
-        write_mock_records(file_path, records_count, &mut encode_record);
+        write_mock_records(
+            file_path,
+            records_count,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
 
@@ -462,7 +479,15 @@ mod test {
         });
         let path = create_test_dir_and_test_file("random_read");
         let path = Path::new(&path);
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut pager = ImdbInlineMetaDataPager::new(&path).unwrap();
 
@@ -498,7 +523,15 @@ mod test {
             check_sum: 0,
         });
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let storage_record = pager.load_next_record_and_metadata().unwrap();
         assert!(storage_record.is_some());
@@ -553,7 +586,15 @@ mod test {
             check_sum: 0,
         });
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         for (i, record) in pager.enumerate() {
             let (starting_offset, record_offset) = find_record_offset(&records, i);
@@ -616,7 +657,15 @@ mod test {
         };
         records.push(storage_record);
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         for i in 0..records.len() {
             let (start_offset, record_offset) = find_record_offset(&records, i);
@@ -648,7 +697,15 @@ mod test {
         let path = create_test_dir_and_test_file("random_read_at_wron_metadata_offse_at_file_end");
         let path = Path::new(&path);
 
-        write_mock_records(path, 1, &mut encode_record);
+        write_mock_records(
+            path,
+            1,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
         let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let res = pager.load_specific_record_and_meta_data_using_id_offset(1);
         assert!(res.is_err());

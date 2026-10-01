@@ -52,8 +52,10 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
+        checksum::crc32::Crc32CheckSum,
         index::imdb_primary_index::ImdbPrimaryIndex,
         mocking_utils::records_paging::{create_kv_entry, write_mock_records},
+        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_storage_engine::{
                 imdb_inline_metadata_disk_manager::{
@@ -74,7 +76,15 @@ mod test {
         let db_data_file = Path::new(&db_data_file);
 
         let iterations = 100;
-        write_mock_records(&db_data_file, iterations, &mut encode_record);
+        write_mock_records(
+            &db_data_file,
+            iterations,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut disk_manager = ImdbInlineMetaDataDiskManager::new(db_dir).unwrap();
         let mut index = ImdbPrimaryIndex::new().unwrap();

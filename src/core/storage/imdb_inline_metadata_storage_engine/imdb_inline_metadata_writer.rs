@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::core::{
+    checksum::crc32::Crc32CheckSum,
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
     storage::{
         imdb_inline_metadata_storage_engine::{
@@ -20,6 +21,7 @@ use crate::core::{
 
 pub struct ImdbInlineMetaDataWriter {
     writer: File,
+    checksum_calculator: Crc32CheckSum,
 }
 
 impl ImdbInlineMetaDataWriter {
@@ -40,7 +42,10 @@ impl ImdbInlineMetaDataWriter {
             );
             fmt_error
         })?;
-        let writer = ImdbInlineMetaDataWriter { writer: file };
+        let writer = ImdbInlineMetaDataWriter {
+            writer: file,
+            checksum_calculator: Crc32CheckSum::new(),
+        };
         return Ok(writer);
     }
 
@@ -54,7 +59,8 @@ impl ImdbInlineMetaDataWriter {
             record.ser_size() as usize + INLINE_STORAGE_RECORD_HEADER_SIZE as usize,
             b'0',
         );
-        encode_record(record, &metadata, &mut buffer)?;
+
+        encode_record(record, &metadata, &mut buffer, &self.checksum_calculator)?;
         let starting_offset = self.writer.stream_position().map_err(|err| {
             let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
             return fmt_error;

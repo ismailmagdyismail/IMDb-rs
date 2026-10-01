@@ -10,7 +10,7 @@
 */
 
 use crate::core::{
-    checksum::{check_sum::CheckSum, crc32::Crc32CheckSum},
+    checksum::check_sum::CheckSum,
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData, META_DATA_SIZE},
     serdes::slicer::Slicer,
     storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
@@ -96,11 +96,15 @@ pub fn decode_whole_record(
     Result::Ok((storage_record, crc_size + metadata_size + record_size))
 }
 
-pub fn encode_record(
+pub fn encode_record<T>(
     record: &ImdbRecord,
     meta_data: &ImdbRecordMetaData,
     buffer: &mut [u8],
-) -> Result<(), String> {
+    checksum_calculator: &T,
+) -> Result<(), String>
+where
+    T: CheckSum,
+{
     if buffer.len() < record.ser_size() as usize + INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
         let error = format!(
             "[Imdb Encode Record Error]: buffer supplied is smaller than payload size {}, {}",
@@ -128,9 +132,8 @@ pub fn encode_record(
     slicer.advance(CHECK_SUM_SIZE);
 
     // calculate, encode checksum / crc
-    let checksum_calc = Crc32CheckSum::new();
     let rest = slicer.next_slice_mut(META_DATA_SIZE + meta_data.key_len + meta_data.val_len);
-    let checksum_val = checksum_calc.calculate(rest);
+    let checksum_val = checksum_calculator.calculate(rest);
 
     slicer.reset();
     let crc_buffer = slicer.next_slice_mut(CHECK_SUM_SIZE);
@@ -145,6 +148,7 @@ pub fn encode_record(
 #[cfg(test)]
 mod test {
     use crate::core::{
+        checksum::crc32::Crc32CheckSum,
         record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::imdb_inline_metadata_storage_engine::{
             imdb_inline_metadata_format::{decode_whole_record, encode_record},
@@ -169,7 +173,8 @@ mod test {
                 b'0',
             );
             let buffer = buffers[i].as_mut_slice();
-            encoded_records.push(encode_record(&record, &meta_data, buffer));
+            let crc_calc = Crc32CheckSum::new();
+            encoded_records.push(encode_record(&record, &meta_data, buffer, &crc_calc));
             records.push((meta_data, record));
         }
 
