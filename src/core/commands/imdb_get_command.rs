@@ -1,5 +1,6 @@
 use crate::core::{
     imdb::Imdb, operations::imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+    storage::imdb_storage_operations_status::ImdbStorageError,
 };
 
 pub struct ImdbGetCommand<'a> {
@@ -14,7 +15,7 @@ impl<'a> ImdbGetCommand<'a> {
     pub fn execute_command(
         &mut self,
         command_args: ImdbGetCommandArgs,
-    ) -> Result<Option<ImdbRecord>, String> {
+    ) -> Result<Option<ImdbRecord>, ImdbStorageError> {
         let record = self.imdb.storage.read_record(command_args.key.to_vec())?;
         Ok(record)
     }

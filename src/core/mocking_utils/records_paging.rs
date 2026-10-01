@@ -1,7 +1,10 @@
 use crate::core::{
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
-    storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
-        INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
+    storage::{
+        imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
+            INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
+        },
+        imdb_storage_operations_status::ImdbStorageError,
     },
 };
 use std::{
@@ -45,7 +48,7 @@ pub fn write_records<T>(
     file_path: &Path,
     formatter_callback: &mut T,
 ) where
-    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), String>,
+    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), ImdbStorageError>,
 {
     let mut options = OpenOptions::new();
     let file = options
@@ -77,7 +80,7 @@ pub fn write_records<T>(
 
 pub fn write_mock_records<T>(file_path: &Path, records_count: usize, formatter_callback: &mut T)
 where
-    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), String>,
+    T: FnMut(&ImdbRecord, &ImdbRecordMetaData, &mut [u8]) -> Result<(), ImdbStorageError>,
 {
     let mut options = OpenOptions::new();
     let file = options

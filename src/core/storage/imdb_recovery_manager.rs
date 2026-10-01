@@ -3,6 +3,7 @@ use crate::core::{
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
         imdb_storage_entries::ImdbStorageWriteEntry,
+        imdb_storage_operations_status::ImdbStorageError,
     },
 };
 
@@ -13,7 +14,7 @@ impl RecoveryManager {
         &self,
         disk_manager: &mut DiskManager,
         index: &mut IndexManager,
-    ) -> Result<(), String>
+    ) -> Result<(), ImdbStorageError>
     where
         DiskManager: ImdbDiskRecordsManager,
         IndexManager: ImdbIndexWriter,

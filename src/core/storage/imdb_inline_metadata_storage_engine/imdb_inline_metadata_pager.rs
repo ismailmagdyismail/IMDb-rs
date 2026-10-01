@@ -24,9 +24,7 @@ use crate::core::{
             },
         },
         imdb_storage_entries::Offset,
-        imdb_storage_operations_status::{
-            ImdbOperationStatus, ImdbStorageError, ImdbStorageOperationResult,
-        },
+        imdb_storage_operations_status::{ImdbStorageError, ImdbStorageOperationResult},
         pager::ImdbRecordPager,
     },
 };
@@ -47,22 +45,18 @@ pub struct ImdbInlineMetaDataPager {
 }
 
 impl ImdbInlineMetaDataPager {
-    pub fn new(file_path: &Path) -> Result<ImdbInlineMetaDataPager, String> {
+    pub fn new(file_path: &Path) -> Result<ImdbInlineMetaDataPager, ImdbStorageError> {
         let mut options = OpenOptions::new();
         let file = options
             .read(true)
             .write(true)
             .create(true)
             .open(file_path)
-            .map_err(|error| {
-                let formatted_errror = format!("[Imdb Opening Data file Error]: {}", error);
-                return formatted_errror;
-            })?;
+            .map_err(|error| ImdbStorageError::FileOpen(error.to_string()))?;
 
-        let stateless_read_file = file.try_clone().map_err(|error| {
-            let formatted_errror = format!("[Imdb Opening Data file Error]: {}", error);
-            return formatted_errror;
-        })?;
+        let stateless_read_file = file
+            .try_clone()
+            .map_err(|error| ImdbStorageError::FileOpen(error.to_string()))?;
         let random_access_buf_reader =
             BufReader::with_capacity(RANDOM_BUFFER_READ_SIZE, stateless_read_file);
 
@@ -74,7 +68,7 @@ impl ImdbInlineMetaDataPager {
 
     fn load_record(
         buf_reader: &mut BufReader<File>,
-    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, ImdbStorageError> {
         // Fill the internal buffer of file reader
         // it may or may not be filled with enough data to decode the record
         // cursor / available bytes MUST be big enough to accomodate at least the Meta-Data
@@ -179,8 +173,7 @@ impl ImdbInlineMetaDataPager {
         let mut buffer = buf_reader.buffer();
         if buffer.len() < INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
             buffer = buf_reader.fill_buf().map_err(|err: std::io::Error| {
-                let formatted_error = format!("[Imdb Error happend while loading record]: {}", err);
-                formatted_error
+                ImdbStorageError::DiskRead("Header", err.to_string())
             })?
         }
         // if empty after re-filling then it may be the last record
@@ -190,12 +183,10 @@ impl ImdbInlineMetaDataPager {
         // if only partial Meta-Data entry is read even after re-filling, then it may have been corrupted
         // cause at this point whole INLINE_STORAGE_RECORD_HEADER_SIZE should be in memory
         if buffer.len() < INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
-            let formatted_error = format!(
-                "[Imdb Error happend while loading Header]: expected {} bytes cached, found {} it may have been corrupted | truncated",
+            return Result::Err(ImdbStorageError::PartialRecordRead(
                 INLINE_STORAGE_RECORD_HEADER_SIZE,
-                buffer.len(),
-            );
-            return Result::Err(formatted_error);
+                buffer.len() as u32,
+            ));
         }
         let mut slicer = Slicer::new(buffer);
         let checksum_slice = slicer.next_slice(CHECK_SUM_SIZE);
@@ -225,18 +216,12 @@ impl ImdbInlineMetaDataPager {
                 //  1. Routing bytes copying (some from internal buffer, some from os-page cache)
                 //  2. Advancing internal cursors (internal buffer cursor, file cursor)
                 let mut record_buffer = vec![b'0'; required_record_size as usize];
-                let record_offset = buf_reader.stream_position().map_err(|err| {
-                    return format!(
-                        "[Imdb Pager error while getting record payload offset]: {}",
-                        err
-                    );
-                })?;
+                let record_offset = buf_reader
+                    .stream_position()
+                    .map_err(|err| ImdbStorageError::DiskSeek("record_payload", err.to_string()))?;
                 buf_reader
                     .read_exact(record_buffer.as_mut_slice())
-                    .map_err(|_| {
-                        let formatted_error = format!("");
-                        return formatted_error;
-                    })?;
+                    .map_err(|err| ImdbStorageError::DiskRead("record_payload", err.to_string()))?;
                 let (record, record_size) =
                     decode_record_payload(&decoded_metadata, record_buffer.as_slice())?;
                 (record, record_size, record_offset)
@@ -259,9 +244,7 @@ impl ImdbInlineMetaDataPager {
             metadata_offset,
             identfying_offset: checksum_offset,
         };
-        ImdbInlineMetaDataPager::validate_checksum(&storage_record).map_err(|err| {
-            return err.to_string();
-        })?;
+        ImdbInlineMetaDataPager::validate_checksum(&storage_record)?;
 
         return Result::Ok(Some(storage_record));
     }
@@ -293,21 +276,19 @@ impl ImdbInlineMetaDataPager {
 
     pub fn read_next_record_and_meta_data(
         &mut self,
-    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, ImdbStorageError> {
         return ImdbInlineMetaDataPager::load_record(&mut self.buf_reader);
     }
 
     pub fn read_specific_record_and_meta_data(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, ImdbStorageError> {
         // this random access always flushes internal buffer
         // so access using this method always involve fetching data from Os-Page-Cache | Disk if not cached
         self.random_access_buf_reader
             .seek(SeekFrom::Start(offset))
-            .map_err(|err| {
-                return format!("[Imdb Random Seek failure]: {}", err);
-            })?;
+            .map_err(|err| ImdbStorageError::DiskSeek("random", err.to_string()))?;
         return ImdbInlineMetaDataPager::load_record(&mut self.random_access_buf_reader);
     }
 }
@@ -317,20 +298,20 @@ impl ImdbRecordPager for ImdbInlineMetaDataPager {
 
     fn load_next_record_and_metadata(
         &mut self,
-    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
+    ) -> Result<Option<Self::ReadStorageEntryType>, ImdbStorageError> {
         return self.read_next_record_and_meta_data();
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
+    ) -> Result<Option<Self::ReadStorageEntryType>, ImdbStorageError> {
         return self.read_specific_record_and_meta_data(offset);
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<ImdbInlineMetaDataStorageReadEntry, String>;
+    type Item = Result<ImdbInlineMetaDataStorageReadEntry, ImdbStorageError>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {

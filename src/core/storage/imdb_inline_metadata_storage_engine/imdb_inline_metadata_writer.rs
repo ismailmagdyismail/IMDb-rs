@@ -15,6 +15,7 @@ use crate::core::{
                 CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
             },
         },
+        imdb_storage_operations_status::ImdbStorageError::{self},
         writer::ImdbRecordWriter,
     },
 };
@@ -25,23 +26,15 @@ pub struct ImdbInlineMetaDataWriter {
 }
 
 impl ImdbInlineMetaDataWriter {
-    pub fn new(file_path: &Path) -> Result<ImdbInlineMetaDataWriter, String> {
+    pub fn new(file_path: &Path) -> Result<ImdbInlineMetaDataWriter, ImdbStorageError> {
         let mut options = OpenOptions::new();
         let mut file = options
             .write(true)
             .append(true)
             .open(file_path)
-            .map_err(|err| {
-                let formatted_record = format!("[Imdb File Writer error]: {}", err);
-                return formatted_record;
-            })?;
-        file.seek(std::io::SeekFrom::End(0)).map_err(|err| {
-            let fmt_error = format!(
-                "[Imdb Writer Error]: couldn't seek to the end of the file {}",
-                err
-            );
-            fmt_error
-        })?;
+            .map_err(|err| ImdbStorageError::FileOpen(err.to_string()))?;
+        file.seek(std::io::SeekFrom::End(0))
+            .map_err(|err| ImdbStorageError::DiskSeek("EOF_APPENDING", err.to_string()))?;
         let writer = ImdbInlineMetaDataWriter {
             writer: file,
             checksum_calculator: Crc32CheckSum::new(),
@@ -52,7 +45,7 @@ impl ImdbInlineMetaDataWriter {
     pub fn write_record(
         &mut self,
         record: &ImdbRecord,
-    ) -> Result<ImdbInlineMetaDataStorageWriteEntry, String> {
+    ) -> Result<ImdbInlineMetaDataStorageWriteEntry, ImdbStorageError> {
         let metadata = ImdbRecordMetaData::from(record);
         let mut buffer = Vec::new();
         buffer.resize(
@@ -61,16 +54,15 @@ impl ImdbInlineMetaDataWriter {
         );
 
         encode_record(record, &metadata, &mut buffer, &self.checksum_calculator)?;
-        let starting_offset = self.writer.stream_position().map_err(|err| {
-            let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
-            return fmt_error;
-        })?;
+        let starting_offset = self
+            .writer
+            .stream_position()
+            .map_err(|err| ImdbStorageError::DiskSeek("id", err.to_string()))?;
         let metadata_offset = starting_offset + CHECK_SUM_SIZE as u64;
         let record_offset = starting_offset + INLINE_STORAGE_RECORD_HEADER_SIZE as u64;
-        self.writer.write_all(&buffer).map_err(|err| {
-            let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
-            return fmt_error;
-        })?;
+        self.writer
+            .write_all(&buffer)
+            .map_err(|err| ImdbStorageError::DiskWrite(err.to_string()))?;
         let storage_entry = ImdbInlineMetaDataStorageWriteEntry {
             record_offset,
             metadata_offset,
@@ -83,29 +75,27 @@ impl ImdbInlineMetaDataWriter {
     // flush content to os-page cache
     // fsync to sync os-page cache pages with disk
     // suffers from "fsync-gate" problem (since we are not using direct-IO)
-    pub fn flush_and_fsync(&mut self) -> Result<(), String> {
-        self.writer.flush().map_err(|err| {
-            let fmt_error = format!(
-                "[Imdb Writer Flushing Error happened while flushing record]: {}",
-                err
-            );
-            return fmt_error;
-        })?;
-        self.writer.sync_all().map_err(|err| {
-            let fmt_error = format!("[Imdb Writer fsync Error happened]: {}", err);
-            return fmt_error;
-        })?;
+    pub fn flush_and_fsync(&mut self) -> Result<(), ImdbStorageError> {
+        self.writer
+            .flush()
+            .map_err(|err| ImdbStorageError::BufferFlush(err.to_string()))?;
+        self.writer
+            .sync_all()
+            .map_err(|err| ImdbStorageError::BufferFlush(err.to_string()))?;
         Ok(())
     }
 }
 
 impl ImdbRecordWriter for ImdbInlineMetaDataWriter {
     type WriteStorageEntry = ImdbInlineMetaDataStorageWriteEntry;
-    fn append_record(&mut self, record: &ImdbRecord) -> Result<Self::WriteStorageEntry, String> {
+    fn append_record(
+        &mut self,
+        record: &ImdbRecord,
+    ) -> Result<Self::WriteStorageEntry, ImdbStorageError> {
         self.write_record(record)
     }
 
-    fn sync(&mut self) -> Result<(), String> {
+    fn sync(&mut self) -> Result<(), ImdbStorageError> {
         self.flush_and_fsync()?;
         Ok(())
     }

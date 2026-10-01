@@ -6,7 +6,7 @@ use crate::core::{
     storage::{
         imdb_disk_records_manager::ImdbDiskRecordsManager,
         imdb_inline_metadata_storage_engine::imdb_inline_metadata_disk_manager::ImdbInlineMetaDataDiskManager,
-        imdb_recovery_manager::RecoveryManager,
+        imdb_recovery_manager::RecoveryManager, imdb_storage_operations_status::ImdbStorageError,
     },
 };
 
@@ -28,7 +28,7 @@ pub struct ImdbStorageEngine {
 }
 
 impl ImdbStorageEngine {
-    pub fn new(storage_path: &Path) -> Result<ImdbStorageEngine, String> {
+    pub fn new(storage_path: &Path) -> Result<ImdbStorageEngine, ImdbStorageError> {
         ImdbStorageEngine::init_storage_directory(storage_path)?;
         let disk_manager = ImdbInlineMetaDataDiskManager::new(storage_path)?;
         let index = ImdbPrimaryIndex::new()?;
@@ -42,20 +42,23 @@ impl ImdbStorageEngine {
         Ok(storage_engine)
     }
 
-    pub fn load_all(&mut self) -> Result<(), String> {
+    pub fn load_all(&mut self) -> Result<(), ImdbStorageError> {
         self.recovery_manager
             .recover(&mut self.disk_manager, &mut self.index)?;
         Ok(())
     }
 
-    pub fn write_record(&mut self, record: ImdbRecord) -> Result<(), String> {
+    pub fn write_record(&mut self, record: ImdbRecord) -> Result<(), ImdbStorageError> {
         let storage_entry = self.disk_manager.write_record(&record)?;
         self.disk_manager.sync()?;
         self.index.cache_record(record, storage_entry);
         Ok(())
     }
 
-    pub fn read_record(&mut self, key: ImdbRecordKey) -> Result<Option<ImdbRecord>, String> {
+    pub fn read_record(
+        &mut self,
+        key: ImdbRecordKey,
+    ) -> Result<Option<ImdbRecord>, ImdbStorageError> {
         let offset = self.index.read_record_offset(&key);
         let offset = if let Some(offset) = offset {
             offset
@@ -69,21 +72,15 @@ impl ImdbStorageEngine {
         } else {
             // record found in index, but not on disk !!
             // this means in-consistency between index, on disk storage
-            let fmt_error = format!("[Imdb Storage Error]: record found in index, not on Disk");
-            Result::Err(fmt_error)
+            Result::Err(ImdbStorageError::InconsistentDiskWithIndex)
         }
     }
 
     // creates directory (with all of its missing parents)
     // if directory already exists, no changes occur
-    fn init_storage_directory(dir_path: &Path) -> Result<(), String> {
-        std::fs::create_dir_all(dir_path).map_err(|err| {
-            let fmt_error = format!(
-                "[Imdb Directory]: error happend while createing Imdb directory {} ",
-                err
-            );
-            fmt_error
-        })?;
+    fn init_storage_directory(dir_path: &Path) -> Result<(), ImdbStorageError> {
+        std::fs::create_dir_all(dir_path)
+            .map_err(|err| ImdbStorageError::StorageDirectory(err.to_string()))?;
         Ok(())
     }
 }

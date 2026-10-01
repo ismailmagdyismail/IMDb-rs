@@ -3,6 +3,7 @@ use crate::core::{
         ImdbRecord, ImdbRecordMetaData, KEY_LEN_SIZE, META_DATA_SIZE, VAL_LEN_SIZE,
     },
     serdes::serdes::{Deserilizer, Serializer},
+    storage::imdb_storage_operations_status::ImdbStorageError,
 };
 
 /*
@@ -20,10 +21,12 @@ impl ImdbRecord {
         return self.key.len() as u32 + self.value.len() as u32;
     }
 
-    pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, String> {
+    pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, ImdbStorageError> {
         let required_size = self.ser_size();
         if (sink_buffer.len() as u32) < required_size {
-            return Result::Err("[Buffer for serialization is too small]".to_string());
+            return Result::Err(ImdbStorageError::EncodeInSufficientBufferSize(
+                "record_serialization",
+            ));
         }
 
         let mut serializer = Serializer::new(sink_buffer);
@@ -39,9 +42,11 @@ impl ImdbRecord {
     pub fn deserialize_copy(
         meta_data: &ImdbRecordMetaData,
         src_buffer: &[u8],
-    ) -> Result<(ImdbRecord, u32), String> {
+    ) -> Result<(ImdbRecord, u32), ImdbStorageError> {
         if meta_data.key_len + meta_data.val_len > src_buffer.len() as u32 {
-            return Result::Err("[Buffer for derserilization is too small]".to_string());
+            return Result::Err(ImdbStorageError::DecodeInSufficientBufferSize(
+                "record_deserialization",
+            ));
         }
         let mut deserializer = Deserilizer::new(&src_buffer);
         let key_sink_buffer = deserializer.deserialize_copy(meta_data.key_len);
@@ -66,10 +71,12 @@ impl ImdbRecordMetaData {
         return KEY_LEN_SIZE + VAL_LEN_SIZE;
     }
 
-    pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, String> {
+    pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, ImdbStorageError> {
         let required_size = self.ser_size();
         if (sink_buffer.len() as u32) < required_size {
-            return Result::Err("[Buffer for Meta-Data serialization is too small]".to_string());
+            return Result::Err(ImdbStorageError::EncodeInSufficientBufferSize(
+                "metadata_serialization",
+            ));
         }
 
         let mut serializer = Serializer::new(sink_buffer);
@@ -82,9 +89,13 @@ impl ImdbRecordMetaData {
         Result::Ok(serializer.size())
     }
 
-    pub fn deserialize_copy(src_buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), String> {
+    pub fn deserialize_copy(
+        src_buffer: &[u8],
+    ) -> Result<(ImdbRecordMetaData, u32), ImdbStorageError> {
         if META_DATA_SIZE > src_buffer.len() as u32 {
-            return Result::Err("[Buffer for Meta-Data derserilization is too small]".to_string());
+            return Result::Err(ImdbStorageError::DecodeInSufficientBufferSize(
+                "metadata_serialization",
+            ));
         }
 
         let mut deserializer = Deserilizer::new(&src_buffer);
@@ -94,12 +105,12 @@ impl ImdbRecordMetaData {
         let key_len = u32::from_le_bytes(
             key_sink_buffer
                 .try_into()
-                .map_err(|_| "Corrupted key_len Entry")?,
+                .map_err(|_| ImdbStorageError::StorageEntryCorruption("key_len"))?,
         );
         let val_len = u32::from_le_bytes(
             value_sink_buffer
                 .try_into()
-                .map_err(|_| "Corrupted value_len Entry")?,
+                .map_err(|_| ImdbStorageError::StorageEntryCorruption("value_len"))?,
         );
 
         let metadata = ImdbRecordMetaData { key_len, val_len };

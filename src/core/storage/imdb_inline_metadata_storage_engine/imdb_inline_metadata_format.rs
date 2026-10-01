@@ -13,23 +13,21 @@ use crate::core::{
     checksum::check_sum::CheckSum,
     record::imdb_record::{ImdbRecord, ImdbRecordMetaData, META_DATA_SIZE},
     serdes::slicer::Slicer,
-    storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
-        CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
+    storage::{
+        imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
+            CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
+        },
+        imdb_storage_operations_status::ImdbStorageError,
     },
 };
 
 // decodes only meta data
 // buffer supplied must have a big enough size to accomodate MetaData
 // could be used for iterative decoding (first header, then allocating large enough buffer for payload)
-pub fn decode_metadata(buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), String> {
+pub fn decode_metadata(buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), ImdbStorageError> {
     let required_buffer_size = META_DATA_SIZE;
     if buffer.len() < required_buffer_size as usize {
-        let error = format!(
-            "[Imdb Decode Record Error]: buffer supplied is smaller than required header size {}, {}",
-            required_buffer_size,
-            buffer.len()
-        );
-        return Result::Err(error);
+        return Result::Err(ImdbStorageError::DecodeInSufficientBufferSize("metadata"));
     }
     let (metadata, metadata_size) = ImdbRecordMetaData::deserialize_copy(buffer)?;
     return Result::Ok((metadata, metadata_size));
@@ -41,29 +39,21 @@ pub fn decode_metadata(buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), Strin
 pub fn decode_record_payload(
     metadata: &ImdbRecordMetaData,
     buffer: &[u8],
-) -> Result<(ImdbRecord, u32), String> {
+) -> Result<(ImdbRecord, u32), ImdbStorageError> {
     let required_buffer_size = metadata.key_len + metadata.val_len;
     if buffer.len() < required_buffer_size as usize {
-        let error = format!(
-            "[Imdb Decode Record Error]: buffer supplied is smaller than payload size {}, {}",
-            required_buffer_size,
-            buffer.len(),
-        );
-        return Result::Err(error);
+        return Result::Err(ImdbStorageError::DecodeInSufficientBufferSize(
+            "record_payload",
+        ));
     }
     let (record, record_size) = ImdbRecord::deserialize_copy(&metadata, buffer)?;
     Result::Ok((record, record_size))
 }
 
-pub fn decode_checksum(buffer: &[u8]) -> Result<(u32, u32), String> {
+pub fn decode_checksum(buffer: &[u8]) -> Result<(u32, u32), ImdbStorageError> {
     let required_buffer_size = CHECK_SUM_SIZE;
     if buffer.len() < required_buffer_size as usize {
-        let error = format!(
-            "[Imdb Decode Record Error]: buffer supplied is smaller than required checksum size {}, {}",
-            required_buffer_size,
-            buffer.len()
-        );
-        return Result::Err(error);
+        return Result::Err(ImdbStorageError::DecodeInSufficientBufferSize("checksum"));
     }
     let checksum_buffer: Vec<u8> = Vec::from(&buffer[0..CHECK_SUM_SIZE as usize]);
     let checksum = u32::from_le_bytes(checksum_buffer.try_into().unwrap());
@@ -73,7 +63,7 @@ pub fn decode_checksum(buffer: &[u8]) -> Result<(u32, u32), String> {
 // buffer supplied must have a big enough size to accomodate MetaData + Record
 pub fn decode_whole_record(
     buffer: &[u8],
-) -> Result<(ImdbInlineMetaDataStorageRecord, u32), String> {
+) -> Result<(ImdbInlineMetaDataStorageRecord, u32), ImdbStorageError> {
     debug_assert!(buffer.len() >= INLINE_STORAGE_RECORD_HEADER_SIZE as usize);
 
     let mut slicer = Slicer::new(buffer);
@@ -102,17 +92,14 @@ pub fn encode_record<T>(
     meta_data: &ImdbRecordMetaData,
     buffer: &mut [u8],
     checksum_calculator: &T,
-) -> Result<(), String>
+) -> Result<(), ImdbStorageError>
 where
     T: CheckSum,
 {
     if buffer.len() < record.ser_size() as usize + INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
-        let error = format!(
-            "[Imdb Encode Record Error]: buffer supplied is smaller than payload size {}, {}",
-            record.ser_size() + meta_data.ser_size(),
-            buffer.len(),
-        );
-        return Result::Err(error);
+        return Result::Err(ImdbStorageError::EncodeInSufficientBufferSize(
+            "record_payload",
+        ));
     }
 
     let mut slicer = Slicer::new(buffer);

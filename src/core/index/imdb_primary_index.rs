@@ -1,7 +1,10 @@
 use crate::core::{
     index::imdb_index::ImdbIndexWriter,
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
-    storage::imdb_storage_entries::{ImdbStorageWriteEntry, Offset},
+    storage::{
+        imdb_storage_entries::{ImdbStorageWriteEntry, Offset},
+        imdb_storage_operations_status::ImdbStorageError,
+    },
 };
 use std::collections::HashMap;
 
@@ -11,7 +14,7 @@ pub struct ImdbPrimaryIndex {
 }
 
 impl ImdbPrimaryIndex {
-    pub fn new() -> Result<ImdbPrimaryIndex, String> {
+    pub fn new() -> Result<ImdbPrimaryIndex, ImdbStorageError> {
         let index = ImdbPrimaryIndex {
             kv_offset_index: HashMap::new(),
         };
@@ -32,7 +35,7 @@ impl ImdbPrimaryIndex {
     //     &self,
     //     key: &ImdbRecordKey,
     //     pager: &mut T,
-    // ) -> Result<Option<ImdbRecord>, String>
+    // ) -> Result<Option<ImdbRecord>, ImdbStorageError>
     // where
     //     T: ImdbRecordPager
 

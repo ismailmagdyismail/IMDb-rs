@@ -1,5 +1,6 @@
 use crate::core::{
     imdb::Imdb, operations::imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+    storage::imdb_storage_operations_status::ImdbStorageError,
 };
 
 pub struct ImdbInsertCommand<'a> {
@@ -11,7 +12,10 @@ impl<'a> ImdbInsertCommand<'a> {
         ImdbInsertCommand { imdb }
     }
 
-    pub fn execute_command(&mut self, insert_args: ImdbInsertCommandArgs) -> Result<(), String> {
+    pub fn execute_command(
+        &mut self,
+        insert_args: ImdbInsertCommandArgs,
+    ) -> Result<(), ImdbStorageError> {
         self.imdb.storage.write_record(insert_args.record)?;
         Ok(())
     }
