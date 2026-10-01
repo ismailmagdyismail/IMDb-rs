@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::core::{
+    checksum::crc32::Crc32CheckSum,
     record::imdb_record::META_DATA_SIZE,
     serdes::slicer::Slicer,
     storage::{
@@ -15,7 +16,7 @@ use crate::core::{
         },
         imdb_inline_metadata_storage_engine::{
             imdb_inline_metadata_format::{
-                decode_checksum, decode_metadata, decode_record_payload,
+                decode_checksum, decode_metadata, decode_record_payload, encode_record,
             },
             imdb_inline_metadata_storage_entries::ImdbInlineMetaDataStorageReadEntry,
             imdb_inline_metadata_storage_record::{
@@ -23,6 +24,9 @@ use crate::core::{
             },
         },
         imdb_storage_entries::Offset,
+        imdb_storage_operations_status::{
+            ImdbOperationStatus, ImdbStorageError, ImdbStorageOperationResult,
+        },
         pager::ImdbRecordPager,
     },
 };
@@ -195,7 +199,7 @@ impl ImdbInlineMetaDataPager {
         }
         let mut slicer = Slicer::new(buffer);
         let checksum_slice = slicer.next_slice(CHECK_SUM_SIZE);
-        let (_, checksum_size) = decode_checksum(checksum_slice)?;
+        let (checksum, checksum_size) = decode_checksum(checksum_slice)?;
         let metadata_buffer_slice = slicer.next_slice(META_DATA_SIZE);
         let (decoded_metadata, metadata_size) = decode_metadata(metadata_buffer_slice)?;
         let required_record_size = decoded_metadata.key_len + decoded_metadata.val_len;
@@ -247,13 +251,44 @@ impl ImdbInlineMetaDataPager {
             };
 
         let storage_record = ImdbInlineMetaDataStorageReadEntry {
+            checksum: checksum,
+            checksum_offset: checksum_offset,
             record: decoded_record,
             record_offset,
             metadata: decoded_metadata,
             metadata_offset,
             identfying_offset: checksum_offset,
         };
+        ImdbInlineMetaDataPager::validate_checksum(&storage_record).map_err(|err| {
+            return err.to_string();
+        })?;
+
         return Result::Ok(Some(storage_record));
+    }
+
+    fn validate_checksum(
+        storage_entry: &ImdbInlineMetaDataStorageReadEntry,
+    ) -> ImdbStorageOperationResult {
+        let storage_checksum = storage_entry.checksum;
+        let checksum_calculator = Crc32CheckSum::new();
+        let mut buffer = Vec::new();
+        let buff_size = (INLINE_STORAGE_RECORD_HEADER_SIZE
+            + storage_entry.metadata.key_len
+            + storage_entry.metadata.val_len) as usize;
+        buffer.resize(buff_size, b'0');
+        encode_record(
+            &storage_entry.record,
+            &storage_entry.metadata,
+            buffer.as_mut_slice(),
+            &checksum_calculator,
+        )
+        .unwrap();
+        let (calculated_checksum, _) = decode_checksum(&buffer).unwrap();
+        if calculated_checksum == storage_checksum {
+            Ok(())
+        } else {
+            Err(ImdbStorageError::CorruptedChecksum)
+        }
     }
 
     pub fn read_next_record_and_meta_data(

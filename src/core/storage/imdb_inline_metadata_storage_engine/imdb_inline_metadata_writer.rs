@@ -75,6 +75,7 @@ impl ImdbInlineMetaDataWriter {
             record_offset,
             metadata_offset,
             identfying_offset: starting_offset,
+            checksum_offset: starting_offset,
         };
         Ok(storage_entry)
     }

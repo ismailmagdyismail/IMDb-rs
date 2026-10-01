@@ -6,3 +6,4 @@ pub mod imdb_storage_engine;
 pub mod imdb_storage_entries;
 pub mod pager;
 pub mod writer;
+pub mod imdb_storage_operations_status;
