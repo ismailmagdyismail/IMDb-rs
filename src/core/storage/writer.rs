@@ -1,20 +1,9 @@
-use crate::core::{record::imdb_record::ImdbRecord, storage::pager::Offset};
-
-#[derive(Debug)]
-pub struct ImdbStorageEntry {
-    // a bit of a leaky abstraction (exposing physical layout format) to return both to the caller
-    pub record_offset: Offset,
-    pub metadata_offset: Offset,
-
-    // refer to pager.rs to
-    pub identfying_offset: Offset,
-}
+use crate::core::{
+    record::imdb_record::ImdbRecord, storage::imdb_storage_entries::ImdbStorageWriteEntry,
+};
 
 pub trait ImdbRecordWriter {
-    fn append_record(
-        &mut self,
-        record: &ImdbRecord,
-    ) -> Result<ImdbStorageEntry, String>;
+    fn append_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String>;
 
     fn sync(&mut self) -> Result<(), String>;
 }

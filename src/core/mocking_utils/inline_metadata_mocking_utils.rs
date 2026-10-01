@@ -2,7 +2,7 @@ use crate::core::storage::{
     imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
         INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
     },
-    pager::Offset,
+    imdb_storage_entries::Offset,
 };
 
 pub fn find_record_offset(

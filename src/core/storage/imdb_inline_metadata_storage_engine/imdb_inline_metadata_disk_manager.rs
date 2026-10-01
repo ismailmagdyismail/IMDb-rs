@@ -1,15 +1,11 @@
 use std::path::Path;
 
 use crate::core::{
-    record::imdb_record::ImdbRecord,
-    storage::{
-        imdb_disk_records_manager::ImdbDiskRecordsManager,
-        imdb_inline_metadata_storage_engine::{
+    record::imdb_record::ImdbRecord, storage::{
+        imdb_disk_records_manager::ImdbDiskRecordsManager, imdb_inline_metadata_storage_engine::{
             imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
             imdb_inline_metadata_writer::ImdbInlineMetaDataWriter,
-        },
-        pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
-        writer::{ImdbRecordWriter, ImdbStorageEntry},
+        }, imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset}, pager::ImdbRecordPager, writer::ImdbRecordWriter,
     },
 };
 
@@ -33,7 +29,7 @@ impl ImdbInlineMetaDataDiskManager {
 }
 
 impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
-    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
+    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String> {
         let storage_entry = self.writer.append_record(record)?;
         Ok(storage_entry)
     }
@@ -46,13 +42,13 @@ impl ImdbDiskRecordsManager for ImdbInlineMetaDataDiskManager {
     fn read_record_with_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, String> {
         return self
             .pager
             .load_specific_record_and_meta_data_using_id_offset(offset);
     }
 
-    fn read_next_record(&mut self) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, String> {
         self.pager.load_next_record_and_metadata()
     }
 }

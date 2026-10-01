@@ -1,4 +1,6 @@
-use crate::core::{imdb::Imdb, operations::imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord};
+use crate::core::{
+    imdb::Imdb, operations::imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+};
 
 pub struct ImdbGetCommand<'a> {
     imdb: &'a mut Imdb,

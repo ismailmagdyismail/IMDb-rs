@@ -21,7 +21,8 @@ use crate::core::{
                 CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
             },
         },
-        pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
+        imdb_storage_entries::{ImdbStorageReadEntry, Offset},
+        pager::ImdbRecordPager,
     },
 };
 
@@ -68,7 +69,7 @@ impl ImdbInlineMetaDataPager {
 
     fn load_record(
         buf_reader: &mut BufReader<File>,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, String> {
         // Fill the internal buffer of file reader
         // it may or may not be filled with enough data to decode the record
         // cursor / available bytes MUST be big enough to accomodate at least the Meta-Data
@@ -244,7 +245,7 @@ impl ImdbInlineMetaDataPager {
                 (record, record_size, record_offset)
             };
 
-        let storage_record = ImdbRecordMetadataStorageEntry {
+        let storage_record = ImdbStorageReadEntry {
             record: decoded_record,
             record_offset,
             metadata: decoded_metadata,
@@ -256,14 +257,14 @@ impl ImdbInlineMetaDataPager {
 
     pub fn read_next_record_and_meta_data(
         &mut self,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, String> {
         return ImdbInlineMetaDataPager::load_record(&mut self.buf_reader);
     }
 
     pub fn read_specific_record_and_meta_data(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, String> {
         // this random access always flushes internal buffer
         // so access using this method always involve fetching data from Os-Page-Cache | Disk if not cached
         self.random_access_buf_reader
@@ -276,22 +277,20 @@ impl ImdbInlineMetaDataPager {
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
-    fn load_next_record_and_metadata(
-        &mut self,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    fn load_next_record_and_metadata(&mut self) -> Result<Option<ImdbStorageReadEntry>, String> {
         return self.read_next_record_and_meta_data();
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbStorageReadEntry>, String> {
         return self.read_specific_record_and_meta_data(offset);
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<ImdbRecordMetadataStorageEntry, String>;
+    type Item = Result<ImdbStorageReadEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {
@@ -325,7 +324,8 @@ mod test {
                     ImdbInlineMetaDataStorageRecord,
                 },
             },
-            pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager},
+            imdb_storage_entries::ImdbStorageReadEntry,
+            pager::ImdbRecordPager,
         },
     };
 
@@ -377,7 +377,7 @@ mod test {
     }
 
     pub fn verify_inline_metadata_fetched_storage_record_offsets(
-        fetched_storage_record: Option<ImdbRecordMetadataStorageEntry>,
+        fetched_storage_record: Option<ImdbStorageReadEntry>,
         original_records: &Vec<ImdbInlineMetaDataStorageRecord>,
         record_to_verify_against_index: usize,
     ) {

@@ -5,15 +5,13 @@ use std::{
 };
 
 use crate::core::{
-    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
-    storage::{
+    record::imdb_record::{ImdbRecord, ImdbRecordMetaData}, storage::{
         imdb_inline_metadata_storage_engine::{
             imdb_inline_metadata_format::encode_record,
             imdb_inline_metadata_storage_record::{
                 CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
             },
-        },
-        writer::{ImdbRecordWriter, ImdbStorageEntry},
+        }, imdb_storage_entries::ImdbStorageWriteEntry, writer::ImdbRecordWriter,
     },
 };
 
@@ -43,7 +41,7 @@ impl ImdbInlineMetaDataWriter {
         return Ok(writer);
     }
 
-    pub fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
+    pub fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String> {
         let metadata = ImdbRecordMetaData::from(record);
         let mut buffer = Vec::new();
         buffer.resize(
@@ -61,7 +59,7 @@ impl ImdbInlineMetaDataWriter {
             let fmt_error = format!("[Imdb Writer Error happened while writing record]: {}", err);
             return fmt_error;
         })?;
-        let storage_entry = ImdbStorageEntry {
+        let storage_entry = ImdbStorageWriteEntry {
             record_offset,
             metadata_offset,
             identfying_offset: starting_offset,
@@ -89,7 +87,7 @@ impl ImdbInlineMetaDataWriter {
 }
 
 impl ImdbRecordWriter for ImdbInlineMetaDataWriter {
-    fn append_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String> {
+    fn append_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String> {
         self.write_record(record)
     }
 
