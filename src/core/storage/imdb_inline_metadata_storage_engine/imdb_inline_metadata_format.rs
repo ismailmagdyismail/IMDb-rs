@@ -65,7 +65,8 @@ pub fn decode_checksum(buffer: &[u8]) -> Result<(u32, u32), String> {
         );
         return Result::Err(error);
     }
-    let checksum = u32::from_le_bytes(buffer.try_into().map_err(|_| "Corrupted checksum Entry")?);
+    let checksum_buffer: Vec<u8> = Vec::from(&buffer[0..CHECK_SUM_SIZE as usize]);
+    let checksum = u32::from_le_bytes(checksum_buffer.try_into().unwrap());
     Ok((checksum, CHECK_SUM_SIZE))
 }
 
@@ -148,11 +149,13 @@ where
 #[cfg(test)]
 mod test {
     use crate::core::{
-        checksum::crc32::Crc32CheckSum,
+        checksum::{check_sum::CheckSum, crc32::Crc32CheckSum},
         record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::imdb_inline_metadata_storage_engine::{
-            imdb_inline_metadata_format::{decode_whole_record, encode_record},
-            imdb_inline_metadata_storage_record::INLINE_STORAGE_RECORD_HEADER_SIZE,
+            imdb_inline_metadata_format::{decode_checksum, decode_whole_record, encode_record},
+            imdb_inline_metadata_storage_record::{
+                CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
+            },
         },
     };
 
@@ -187,6 +190,33 @@ mod test {
             let actual_record = &records[i].1;
             assert_eq!(storage_record.record.key, actual_record.key);
             assert_eq!(storage_record.record.value, actual_record.value);
+        }
+    }
+
+    #[test]
+    fn test_checksum_serdes() {
+        let mut records = Vec::new();
+        let mut encoded_records = Vec::new();
+        let mut buffers = vec![Vec::<u8>::new(); 100];
+        for i in 0..100 {
+            let key = i.to_string().as_bytes().to_vec();
+            let value = "name".as_bytes().to_vec();
+            let key_len = key.len() as u32;
+            let val_len = value.len() as u32;
+            let record = ImdbRecord { key, value };
+            let meta_data = ImdbRecordMetaData { key_len, val_len };
+            buffers[i].resize(
+                (INLINE_STORAGE_RECORD_HEADER_SIZE + key_len + val_len) as usize,
+                b'0',
+            );
+            let buffer = buffers[i].as_mut_slice();
+            let crc_calc = Crc32CheckSum::new();
+            encoded_records.push(encode_record(&record, &meta_data, buffer, &crc_calc));
+            let encoded_checksum = crc_calc.calculate(&buffer[CHECK_SUM_SIZE as usize..]);
+            dbg!(encoded_checksum.to_le_bytes());
+            let (decoded_checksum, _) = decode_checksum(buffer).unwrap();
+            assert_eq!(encoded_checksum, decoded_checksum);
+            records.push((meta_data, record));
         }
     }
 }
