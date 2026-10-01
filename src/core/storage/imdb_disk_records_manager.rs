@@ -1,9 +1,6 @@
 use crate::core::{
     record::imdb_record::ImdbRecord,
-    storage::{
-        pager::{ImdbRecordMetadataStorageEntry, Offset},
-        writer::ImdbStorageEntry,
-    },
+    storage::imdb_storage_entries::{ImdbStorageReadEntry, ImdbStorageWriteEntry, Offset},
 };
 
 // I am not sure yet about the abtraction level here
@@ -38,21 +35,18 @@ use crate::core::{
 //
 
 pub trait ImdbDiskRecordsManager {
-    type Reader;
-    type Writer;
-
-    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageEntry, String>;
+    fn write_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String>;
 
     fn sync(&mut self) -> Result<(), String>;
 
     fn read_record_with_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String>;
+    ) -> Result<Option<ImdbStorageReadEntry>, String>;
 
-    fn read_next_record(&mut self) -> Result<Option<ImdbRecordMetadataStorageEntry>, String>;
+    fn read_next_record(&mut self) -> Result<Option<ImdbStorageReadEntry>, String>;
 
-    // a More generic, better API I think 
+    // a More generic, better API I think
     // returns a cursor / Iterator like
     // thread safe, since read only cursor
     // can iterate over records as needed by caller

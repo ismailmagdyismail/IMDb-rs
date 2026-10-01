@@ -1,4 +1,4 @@
-use crate::core::imdb_errors::error_message_formatter;
+use crate::core::operations::imdb_errors::error_message_formatter;
 
 #[derive(Debug, PartialEq)]
 pub enum ImdbCommand {

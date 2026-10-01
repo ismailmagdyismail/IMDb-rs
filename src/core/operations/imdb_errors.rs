@@ -1,4 +1,4 @@
-use crate::core::imdb_messages::USAGE_MESSAGE;
+use crate::core::operations::imdb_messages::USAGE_MESSAGE;
 
 pub fn error_message_formatter(error: String) -> String {
     let mut formatted_error_message = String::from("\n\n");

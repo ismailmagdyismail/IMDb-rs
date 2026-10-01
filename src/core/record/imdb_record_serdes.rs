@@ -1,9 +1,19 @@
 use crate::core::{
     record::imdb_record::{
-        CHECK_SUM_SIZE, HEADER_SIZE, ImdbRecord, ImdbRecordMetaData, KEY_LEN_SIZE, VAL_LEN_SIZE,
+        ImdbRecord, ImdbRecordMetaData, KEY_LEN_SIZE, META_DATA_SIZE, VAL_LEN_SIZE,
     },
     serdes::serdes::{Deserilizer, Serializer},
 };
+
+/*
+- this is somewhat coupled to the underlying storage engine format
+- we cannot easily change the format to use columnar oriented format for example
+- THUS it should be moved out of here to the storage_engine/imdb_inline_format.rs
+- since each storage_engine could decide its own format
+- EX_1: inline_meta data => [checksum, header, payload]
+- EX_2: columnar => [header_0,header_1,header_3] , [payload_0,payload_1,payload_2]
+the current serdes makes an IMPLICIT choice about the underlying engine
+*/
 
 impl ImdbRecord {
     pub fn ser_size(&self) -> u32 {
@@ -53,7 +63,7 @@ impl ImdbRecord {
 
 impl ImdbRecordMetaData {
     pub fn ser_size(&self) -> u32 {
-        return HEADER_SIZE;
+        return KEY_LEN_SIZE + VAL_LEN_SIZE;
     }
 
     pub fn serialize(&self, sink_buffer: &mut [u8]) -> Result<u32, String> {
@@ -64,7 +74,6 @@ impl ImdbRecordMetaData {
 
         let mut serializer = Serializer::new(sink_buffer);
         serializer
-            .serialize(&self.check_sum.to_le_bytes())
             .serialize(&self.key_len.to_le_bytes())
             .serialize(&self.val_len.to_le_bytes());
 
@@ -74,20 +83,14 @@ impl ImdbRecordMetaData {
     }
 
     pub fn deserialize_copy(src_buffer: &[u8]) -> Result<(ImdbRecordMetaData, u32), String> {
-        if HEADER_SIZE > src_buffer.len() as u32 {
+        if META_DATA_SIZE > src_buffer.len() as u32 {
             return Result::Err("[Buffer for Meta-Data derserilization is too small]".to_string());
         }
 
         let mut deserializer = Deserilizer::new(&src_buffer);
-        let checksum_sink_buffer = deserializer.deserialize_copy(CHECK_SUM_SIZE as u32);
         let key_sink_buffer = deserializer.deserialize_copy(KEY_LEN_SIZE as u32);
         let value_sink_buffer = deserializer.deserialize_copy(VAL_LEN_SIZE as u32);
 
-        let check_sum = u32::from_le_bytes(
-            checksum_sink_buffer
-                .try_into()
-                .map_err(|_| "Corrupted checksum Entry")?,
-        );
         let key_len = u32::from_le_bytes(
             key_sink_buffer
                 .try_into()
@@ -99,18 +102,14 @@ impl ImdbRecordMetaData {
                 .map_err(|_| "Corrupted value_len Entry")?,
         );
 
-        let metadata = ImdbRecordMetaData {
-            check_sum,
-            key_len,
-            val_len,
-        };
+        let metadata = ImdbRecordMetaData { key_len, val_len };
         Ok((metadata, deserializer.size()))
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::core::record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData};
+    use crate::core::record::imdb_record::{ImdbRecord, ImdbRecordMetaData, META_DATA_SIZE};
 
     #[test]
     fn test_size_required() {
@@ -160,7 +159,6 @@ mod test {
         assert_eq!(ser_required_size, actual_size);
 
         let meta_data = ImdbRecordMetaData {
-            check_sum: 0,
             key_len: key_len as u32,
             val_len: value_len as u32,
         };
@@ -173,41 +171,30 @@ mod test {
 
     #[test]
     fn test_metadata_serialization() {
-        let check_sum = 0;
         let key_len = 1;
         let val_len = 6;
-        let meta_data = ImdbRecordMetaData {
-            check_sum,
-            key_len,
-            val_len,
-        };
+        let meta_data = ImdbRecordMetaData { key_len, val_len };
         let expected_ser_size = meta_data.ser_size();
-        assert_eq!(expected_ser_size, HEADER_SIZE);
+        assert_eq!(expected_ser_size, META_DATA_SIZE);
 
-        let mut buffer = [b'0'; HEADER_SIZE as usize];
+        let mut buffer = [b'0'; META_DATA_SIZE as usize];
         let actual_ser_size = meta_data.serialize(&mut buffer).unwrap();
         assert_eq!(expected_ser_size, actual_ser_size);
     }
 
     #[test]
     fn test_written_metadata_bytes() {
-        let check_sum = 0;
         let key_len = 1;
         let val_len = 6;
-        let meta_data = ImdbRecordMetaData {
-            check_sum,
-            key_len,
-            val_len,
-        };
+        let meta_data = ImdbRecordMetaData { key_len, val_len };
         let expected_ser_size = meta_data.ser_size();
-        assert_eq!(expected_ser_size, HEADER_SIZE);
+        assert_eq!(expected_ser_size, META_DATA_SIZE);
 
-        let mut buffer = [b'0'; HEADER_SIZE as usize];
+        let mut buffer = [b'0'; META_DATA_SIZE as usize];
         let actual_ser_size = meta_data.serialize(&mut buffer).unwrap();
         assert_eq!(expected_ser_size, actual_ser_size);
 
         let expected_bytes = [
-            0u32.to_le_bytes(), // checksum
             1u32.to_le_bytes(), // key_len
             6u32.to_le_bytes(), // val_len
         ]
@@ -219,42 +206,29 @@ mod test {
 
     #[test]
     fn test_metadata_deserialzation() {
-        let check_sum: u32 = 0;
         let key_len: u32 = 1;
         let val_len: u32 = 6;
-        let ser_buffer = [
-            check_sum.to_le_bytes(),
-            key_len.to_le_bytes(),
-            val_len.to_le_bytes(),
-        ]
-        .concat();
+        let ser_buffer = [key_len.to_le_bytes(), val_len.to_le_bytes()].concat();
 
         let (des_metadata, des_size) = ImdbRecordMetaData::deserialize_copy(&ser_buffer).unwrap();
-        assert_eq!(des_size, HEADER_SIZE);
-        assert_eq!(des_metadata.check_sum, check_sum);
+        assert_eq!(des_size, META_DATA_SIZE);
         assert_eq!(des_metadata.key_len, key_len);
         assert_eq!(des_metadata.val_len, val_len);
     }
 
     #[test]
     fn test_metadata_serdes() {
-        let check_sum = 0;
         let key_len = 1;
         let val_len = 6;
-        let metadata = ImdbRecordMetaData {
-            check_sum,
-            key_len,
-            val_len,
-        };
+        let metadata = ImdbRecordMetaData { key_len, val_len };
 
-        let mut ser_buffer = vec![b'0'; HEADER_SIZE as usize];
+        let mut ser_buffer = vec![b'0'; META_DATA_SIZE as usize];
         let ser_size = metadata.serialize(&mut &mut ser_buffer).unwrap();
-        assert_eq!(ser_size, HEADER_SIZE);
+        assert_eq!(ser_size, META_DATA_SIZE);
 
         let (des_metadata, des_size) = ImdbRecordMetaData::deserialize_copy(&ser_buffer).unwrap();
-        assert_eq!(des_size, HEADER_SIZE);
+        assert_eq!(des_size, META_DATA_SIZE);
 
-        assert_eq!(des_metadata.check_sum, check_sum);
         assert_eq!(des_metadata.key_len, key_len);
         assert_eq!(des_metadata.val_len, val_len);
     }

@@ -1,7 +1,7 @@
 use crate::core::{
     index::imdb_index::ImdbIndexWriter,
     record::imdb_record::{ImdbRecord, ImdbRecordKey},
-    storage::pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
+    storage::imdb_storage_entries::{ImdbStorageWriteEntry, Offset},
 };
 use std::collections::HashMap;
 
@@ -28,25 +28,13 @@ impl ImdbPrimaryIndex {
     // use "read_record_offset" api for more granularity
     // callers may have result cached in some BufferPool so this couples index with disk access
     // up tp caller to coordinate that
-    pub fn read_record<T>(
-        &self,
-        key: &ImdbRecordKey,
-        pager: &mut T,
-    ) -> Result<Option<ImdbRecord>, String>
-    where
-        T: ImdbRecordPager,
-    {
-        let offset = match self.kv_offset_index.get(key) {
-            Some(offset) => offset,
-            None => return Result::Ok(Option::None),
-        };
-        let storage_record = pager.load_specific_record_and_meta_data_using_id_offset(*offset)?;
-        if let Option::Some(storage_record) = storage_record {
-            return Result::Ok(Option::Some(storage_record.record));
-        }
-        let fmt_error = format!("[Imdb Index Error]: record  found in index, not on Disk");
-        return Result::Err(fmt_error);
-    }
+    // pub fn read_record<T>(
+    //     &self,
+    //     key: &ImdbRecordKey,
+    //     pager: &mut T,
+    // ) -> Result<Option<ImdbRecord>, String>
+    // where
+    //     T: ImdbRecordPager
 
     pub fn write_record(&mut self, key: ImdbRecordKey, offset: Offset) {
         self.kv_offset_index.insert(key, offset);
@@ -54,8 +42,8 @@ impl ImdbPrimaryIndex {
 }
 
 impl ImdbIndexWriter for ImdbPrimaryIndex {
-    fn cache_record(&mut self, storage_entry: ImdbRecordMetadataStorageEntry) {
-        self.write_record(storage_entry.record.key, storage_entry.identfying_offset);
+    fn cache_record(&mut self, record: ImdbRecord, storage_write_entry: ImdbStorageWriteEntry) {
+        self.write_record(record.key, storage_write_entry.identfying_offset);
     }
 }
 
@@ -64,8 +52,10 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
+        checksum::crc32::Crc32CheckSum,
         index::imdb_primary_index::ImdbPrimaryIndex,
         mocking_utils::records_paging::{create_kv_entry, write_mock_records},
+        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_storage_engine::{
                 imdb_inline_metadata_disk_manager::{
@@ -86,7 +76,15 @@ mod test {
         let db_data_file = Path::new(&db_data_file);
 
         let iterations = 100;
-        write_mock_records(&db_data_file, iterations, &mut encode_record);
+        write_mock_records(
+            &db_data_file,
+            iterations,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut disk_manager = ImdbInlineMetaDataDiskManager::new(db_dir).unwrap();
         let mut index = ImdbPrimaryIndex::new().unwrap();

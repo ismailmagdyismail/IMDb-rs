@@ -6,7 +6,7 @@ use crate::core::{
         imdb_get_command::{ImdbGetCommand, ImdbGetCommandArgs},
         imdb_insert_command::{ImdbInsertCommand, ImdbInsertCommandArgs},
     },
-    imdb_config::ImdbConfig,
+    operations::imdb_config::ImdbConfig,
     record::imdb_record::ImdbRecord,
     storage::imdb_storage_engine::ImdbStorageEngine,
 };

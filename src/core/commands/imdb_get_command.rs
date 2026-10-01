@@ -1,5 +1,5 @@
 use crate::core::{
-    imdb::Imdb, imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
+    imdb::Imdb, operations::imdb_errors::error_message_formatter, record::imdb_record::ImdbRecord,
 };
 
 pub struct ImdbGetCommand<'a> {

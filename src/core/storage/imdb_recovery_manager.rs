@@ -1,5 +1,9 @@
 use crate::core::{
-    index::imdb_index::ImdbIndexWriter, storage::imdb_disk_records_manager::ImdbDiskRecordsManager,
+    index::imdb_index::ImdbIndexWriter,
+    storage::{
+        imdb_disk_records_manager::ImdbDiskRecordsManager,
+        imdb_storage_entries::ImdbStorageWriteEntry,
+    },
 };
 
 pub struct RecoveryManager {}
@@ -16,7 +20,12 @@ impl RecoveryManager {
     {
         loop {
             if let Some(storage_entry) = disk_manager.read_next_record()? {
-                index.cache_record(storage_entry);
+                index.cache_record(
+                    storage_entry.record,
+                    ImdbStorageWriteEntry {
+                        identfying_offset: storage_entry.identfying_offset,
+                    },
+                );
             } else {
                 break;
             }

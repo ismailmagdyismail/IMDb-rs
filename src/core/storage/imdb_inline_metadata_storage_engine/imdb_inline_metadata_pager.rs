@@ -5,16 +5,25 @@ use std::{
 };
 
 use crate::core::{
-    record::imdb_record::HEADER_SIZE,
+    record::imdb_record::META_DATA_SIZE,
+    serdes::slicer::Slicer,
     storage::{
         buffer_helpers::{
+            advance_internal_buffer_cursor_by_check_sum,
             advance_internal_buffer_cursor_by_metadata,
             advance_internal_buffer_cursor_by_record_payload,
         },
-        imdb_inline_metadata_storage_engine::imdb_inline_metadata_format::{
-            decode_metadata, decode_record_payload,
+        imdb_inline_metadata_storage_engine::{
+            imdb_inline_metadata_format::{
+                decode_checksum, decode_metadata, decode_record_payload,
+            },
+            imdb_inline_metadata_storage_entries::ImdbInlineMetaDataStorageReadEntry,
+            imdb_inline_metadata_storage_record::{
+                CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
+            },
         },
-        pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager, Offset},
+        imdb_storage_entries::Offset,
+        pager::ImdbRecordPager,
     },
 };
 
@@ -61,7 +70,7 @@ impl ImdbInlineMetaDataPager {
 
     fn load_record(
         buf_reader: &mut BufReader<File>,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         // Fill the internal buffer of file reader
         // it may or may not be filled with enough data to decode the record
         // cursor / available bytes MUST be big enough to accomodate at least the Meta-Data
@@ -164,7 +173,7 @@ impl ImdbInlineMetaDataPager {
         // OR From (Os-Page Cache to supplied buffer then from supplied buffer to ImdbStorageRecord)
 
         let mut buffer = buf_reader.buffer();
-        if buffer.len() < HEADER_SIZE as usize {
+        if buffer.len() < INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
             buffer = buf_reader.fill_buf().map_err(|err: std::io::Error| {
                 let formatted_error = format!("[Imdb Error happend while loading record]: {}", err);
                 formatted_error
@@ -175,17 +184,25 @@ impl ImdbInlineMetaDataPager {
             return Result::Ok(None);
         }
         // if only partial Meta-Data entry is read even after re-filling, then it may have been corrupted
-        // cause at this point whole HEADER_SIZE should be in memory
-        if buffer.len() < HEADER_SIZE as usize {
+        // cause at this point whole INLINE_STORAGE_RECORD_HEADER_SIZE should be in memory
+        if buffer.len() < INLINE_STORAGE_RECORD_HEADER_SIZE as usize {
             let formatted_error = format!(
                 "[Imdb Error happend while loading Header]: expected {} bytes cached, found {} it may have been corrupted | truncated",
-                HEADER_SIZE,
+                INLINE_STORAGE_RECORD_HEADER_SIZE,
                 buffer.len(),
             );
             return Result::Err(formatted_error);
         }
-        let (decoded_metadata, metadata_size) = decode_metadata(buffer)?;
+        let mut slicer = Slicer::new(buffer);
+        let checksum_slice = slicer.next_slice(CHECK_SUM_SIZE);
+        let (_, checksum_size) = decode_checksum(checksum_slice)?;
+        let metadata_buffer_slice = slicer.next_slice(META_DATA_SIZE);
+        let (decoded_metadata, metadata_size) = decode_metadata(metadata_buffer_slice)?;
         let required_record_size = decoded_metadata.key_len + decoded_metadata.val_len;
+
+        // advance, pass over checksum, metadata
+        let checksum_offset =
+            advance_internal_buffer_cursor_by_check_sum(buf_reader, checksum_size)?;
         let metadata_offset =
             advance_internal_buffer_cursor_by_metadata(buf_reader, metadata_size)?;
 
@@ -229,26 +246,26 @@ impl ImdbInlineMetaDataPager {
                 (record, record_size, record_offset)
             };
 
-        let storage_record = ImdbRecordMetadataStorageEntry {
+        let storage_record = ImdbInlineMetaDataStorageReadEntry {
             record: decoded_record,
             record_offset,
             metadata: decoded_metadata,
             metadata_offset,
-            identfying_offset: metadata_offset,
+            identfying_offset: checksum_offset,
         };
         return Result::Ok(Some(storage_record));
     }
 
     pub fn read_next_record_and_meta_data(
         &mut self,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         return ImdbInlineMetaDataPager::load_record(&mut self.buf_reader);
     }
 
     pub fn read_specific_record_and_meta_data(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         // this random access always flushes internal buffer
         // so access using this method always involve fetching data from Os-Page-Cache | Disk if not cached
         self.random_access_buf_reader
@@ -261,22 +278,24 @@ impl ImdbInlineMetaDataPager {
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
+    type ReadStorageEntryType = ImdbInlineMetaDataStorageReadEntry;
+
     fn load_next_record_and_metadata(
         &mut self,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
         return self.read_next_record_and_meta_data();
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbRecordMetadataStorageEntry>, String> {
+    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
         return self.read_specific_record_and_meta_data(offset);
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<ImdbRecordMetadataStorageEntry, String>;
+    type Item = Result<ImdbInlineMetaDataStorageReadEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {
@@ -296,17 +315,23 @@ mod test {
     use std::path::Path;
 
     use crate::core::{
+        checksum::crc32::Crc32CheckSum,
         mocking_utils::{
             inline_metadata_mocking_utils::find_record_offset,
             records_paging::{verify_record, write_mock_records, write_records},
         },
-        record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData},
+        record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
         storage::{
             imdb_inline_metadata_storage_engine::{
                 imdb_inline_metadata_format::encode_record,
                 imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+                imdb_inline_metadata_storage_entries::ImdbInlineMetaDataStorageReadEntry,
+                imdb_inline_metadata_storage_record::{
+                    CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
+                    ImdbInlineMetaDataStorageRecord,
+                },
             },
-            pager::{ImdbRecordMetadataStorageEntry, ImdbRecordPager},
+            pager::ImdbRecordPager,
         },
     };
 
@@ -325,7 +350,15 @@ mod test {
         let file_path = create_test_dir_and_test_file("loading_test");
         let file_path = Path::new(&file_path);
         let records_count = 100;
-        write_mock_records(file_path, records_count, &mut encode_record);
+        write_mock_records(
+            file_path,
+            records_count,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
         let mut loaded_records_count = 0;
@@ -347,7 +380,15 @@ mod test {
         let file_path = create_test_dir_and_test_file("iterator");
         let file_path = Path::new(&file_path);
         let records_count = 100;
-        write_mock_records(file_path, records_count, &mut encode_record);
+        write_mock_records(
+            file_path,
+            records_count,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let pager = ImdbInlineMetaDataPager::new(file_path).unwrap();
 
@@ -358,22 +399,19 @@ mod test {
     }
 
     pub fn verify_inline_metadata_fetched_storage_record_offsets(
-        fetched_storage_record: Option<ImdbRecordMetadataStorageEntry>,
-        original_records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
+        fetched_storage_record: Option<ImdbInlineMetaDataStorageReadEntry>,
+        original_records: &Vec<ImdbInlineMetaDataStorageRecord>,
         record_to_verify_against_index: usize,
     ) {
         assert!(fetched_storage_record.is_some());
         let fetched_storage_record = fetched_storage_record.unwrap();
-        let (metadata_offset_expected, record_offset_expected) =
+        let (starting_offset, record_offset_expected) =
             find_record_offset(original_records, record_to_verify_against_index);
 
-        assert_eq!(
-            fetched_storage_record.identfying_offset,
-            fetched_storage_record.metadata_offset
-        );
+        assert_eq!(fetched_storage_record.identfying_offset, starting_offset);
         assert_eq!(
             fetched_storage_record.metadata_offset,
-            metadata_offset_expected as u64
+            starting_offset + CHECK_SUM_SIZE as u64
         );
         assert_eq!(
             fetched_storage_record.record_offset,
@@ -381,61 +419,75 @@ mod test {
         );
         assert_eq!(
             fetched_storage_record.metadata.key_len,
-            original_records[record_to_verify_against_index].1.key_len
+            original_records[record_to_verify_against_index]
+                .metadata
+                .key_len
         );
         assert_eq!(
             fetched_storage_record.metadata.val_len,
-            original_records[record_to_verify_against_index].1.val_len
+            original_records[record_to_verify_against_index]
+                .metadata
+                .val_len
         );
         assert_eq!(
             fetched_storage_record.record.key,
-            original_records[record_to_verify_against_index].0.key
+            original_records[record_to_verify_against_index].record.key
         );
         assert_eq!(
             fetched_storage_record.record.value,
-            original_records[record_to_verify_against_index].0.value
+            original_records[record_to_verify_against_index]
+                .record
+                .value
         );
     }
 
     #[test]
     pub fn test_random_read() {
         let mut records = Vec::new();
-        records.push((
-            ImdbRecord {
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: "1".as_bytes().to_vec(),
                 value: "name".as_bytes().to_vec(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: 1,
                 val_len: 4,
-                check_sum: 0,
             },
-        ));
-        records.push((
-            ImdbRecord {
+            check_sum: 0,
+        });
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: "123".as_bytes().to_vec(),
                 value: "another_name".as_bytes().to_vec(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: 3,
                 val_len: 12,
-                check_sum: 0,
             },
-        ));
-        records.push((
-            ImdbRecord {
+            check_sum: 0,
+        });
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: "123791237981273".as_bytes().to_vec(),
                 value: "mashekjwhrkjwehrkjw".as_bytes().to_vec(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: 15,
                 val_len: 19,
-                check_sum: 0,
             },
-        ));
+            check_sum: 0,
+        });
         let path = create_test_dir_and_test_file("random_read");
         let path = Path::new(&path);
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let mut pager = ImdbInlineMetaDataPager::new(&path).unwrap();
 
@@ -459,19 +511,27 @@ mod test {
         let mut records = Vec::new();
         let key = vec![b'1'; buffer_capacity];
         let value = vec![b'2'; buffer_capacity];
-        records.push((
-            ImdbRecord {
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: key.clone(),
                 value: value.clone(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: key.len() as u32,
                 val_len: value.len() as u32,
-                check_sum: 0,
             },
-        ));
+            check_sum: 0,
+        });
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         let storage_record = pager.load_next_record_and_metadata().unwrap();
         assert!(storage_record.is_some());
@@ -481,13 +541,12 @@ mod test {
         assert_eq!(storage_record.identfying_offset, 0);
 
         // verify metadata
-        assert_eq!(storage_record.metadata.check_sum, records[0].1.check_sum);
-        assert_eq!(storage_record.metadata.key_len, records[0].1.key_len);
-        assert_eq!(storage_record.metadata.val_len, records[0].1.val_len);
+        assert_eq!(storage_record.metadata.key_len, records[0].metadata.key_len);
+        assert_eq!(storage_record.metadata.val_len, records[0].metadata.val_len);
 
         // verify record
-        assert_eq!(storage_record.record.key, records[0].0.key);
-        assert_eq!(storage_record.record.value, records[0].0.value);
+        assert_eq!(storage_record.record.key, records[0].record.key);
+        assert_eq!(storage_record.record.value, records[0].record.value);
     }
 
     #[test]
@@ -502,49 +561,60 @@ mod test {
         let key = vec![b'1'; key_size];
         // takes the rest of the buffer, expect 10 bytes to leave room for next header of next record
         // so next record's header could span current buffer + and another one
-        let value = vec![b'2'; buffer_capacity - key_size - HEADER_SIZE as usize];
-        records.push((
-            ImdbRecord {
+        let value =
+            vec![b'2'; buffer_capacity - key_size - INLINE_STORAGE_RECORD_HEADER_SIZE as usize];
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: key.clone(),
                 value: value.clone(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: key.len() as u32,
                 val_len: value.len() as u32,
-                check_sum: 0,
             },
-        ));
-        records.push((
-            ImdbRecord {
+            check_sum: 0,
+        });
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: value.clone(),
                 value: key.clone(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: value.len() as u32,
                 val_len: key.len() as u32,
-                check_sum: 0,
             },
-        ));
+            check_sum: 0,
+        });
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         for (i, record) in pager.enumerate() {
-            let (metadata_offset, record_offset) = find_record_offset(&records, i);
+            let (starting_offset, record_offset) = find_record_offset(&records, i);
             let storage_record = record.unwrap();
 
             // offsets
-            assert_eq!(storage_record.identfying_offset, metadata_offset);
+            assert_eq!(storage_record.identfying_offset, starting_offset);
             assert_eq!(storage_record.record_offset, record_offset);
-            assert_eq!(storage_record.metadata_offset, metadata_offset);
+            assert_eq!(
+                storage_record.metadata_offset,
+                starting_offset + CHECK_SUM_SIZE as u64
+            );
 
             // verify metadata
-            assert_eq!(storage_record.metadata.check_sum, records[i].1.check_sum);
-            assert_eq!(storage_record.metadata.key_len, records[i].1.key_len);
-            assert_eq!(storage_record.metadata.val_len, records[i].1.val_len);
+            assert_eq!(storage_record.metadata.key_len, records[i].metadata.key_len);
+            assert_eq!(storage_record.metadata.val_len, records[i].metadata.val_len);
 
             // verify record
-            assert_eq!(storage_record.record.key, records[i].0.key);
-            assert_eq!(storage_record.record.value, records[i].0.value);
+            assert_eq!(storage_record.record.key, records[i].record.key);
+            assert_eq!(storage_record.record.value, records[i].record.value);
         }
     }
 
@@ -561,52 +631,64 @@ mod test {
         let key = vec![b'1'; key_size];
         // takes the rest of the buffer, expect 10 bytes to leave room for next header of next record
         // so next record's header could span current buffer + and another one
-        let value = vec![b'2'; buffer_capacity - key_size - HEADER_SIZE as usize];
-        records.push((
-            ImdbRecord {
+        let value =
+            vec![b'2'; buffer_capacity - key_size - INLINE_STORAGE_RECORD_HEADER_SIZE as usize];
+        records.push(ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: key.clone(),
                 value: value.clone(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: key.len() as u32,
                 val_len: value.len() as u32,
-                check_sum: 0,
             },
-        ));
-        records.push((
-            ImdbRecord {
+            check_sum: 0,
+        });
+        let storage_record = ImdbInlineMetaDataStorageRecord {
+            record: ImdbRecord {
                 key: key.clone(),
                 value: value.clone(),
             },
-            ImdbRecordMetaData {
+            metadata: ImdbRecordMetaData {
                 key_len: key.len() as u32,
                 val_len: value.len() as u32,
-                check_sum: 0,
             },
-        ));
+            check_sum: 0,
+        };
+        records.push(storage_record);
 
-        write_records(&records, path, &mut encode_record);
+        write_records(
+            &records,
+            path,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
 
         for i in 0..records.len() {
-            let (metadata_offset, record_offset) = find_record_offset(&records, i);
+            let (start_offset, record_offset) = find_record_offset(&records, i);
             let storage_record = pager
-                .load_specific_record_and_meta_data_using_id_offset(metadata_offset)
+                .load_specific_record_and_meta_data_using_id_offset(start_offset)
                 .unwrap()
                 .unwrap();
 
             // offsets
-            assert_eq!(storage_record.identfying_offset, metadata_offset);
+            assert_eq!(storage_record.identfying_offset, start_offset);
             assert_eq!(storage_record.record_offset, record_offset);
-            assert_eq!(storage_record.metadata_offset, metadata_offset);
+            assert_eq!(
+                storage_record.metadata_offset,
+                start_offset + CHECK_SUM_SIZE as u64
+            );
 
             // verify metadata
-            assert_eq!(storage_record.metadata.check_sum, records[i].1.check_sum);
-            assert_eq!(storage_record.metadata.key_len, records[i].1.key_len);
-            assert_eq!(storage_record.metadata.val_len, records[i].1.val_len);
+            assert_eq!(storage_record.metadata.key_len, records[i].metadata.key_len);
+            assert_eq!(storage_record.metadata.val_len, records[i].metadata.val_len);
 
             // verify record
-            assert_eq!(storage_record.record.key, records[i].0.key);
-            assert_eq!(storage_record.record.value, records[i].0.value);
+            assert_eq!(storage_record.record.key, records[i].record.key);
+            assert_eq!(storage_record.record.value, records[i].record.value);
         }
     }
 
@@ -615,7 +697,15 @@ mod test {
         let path = create_test_dir_and_test_file("random_read_at_wron_metadata_offse_at_file_end");
         let path = Path::new(&path);
 
-        write_mock_records(path, 1, &mut encode_record);
+        write_mock_records(
+            path,
+            1,
+            &mut |record: &ImdbRecord, metadata: &ImdbRecordMetaData, buffer: &mut [u8]| {
+                let checksum_calculator = Crc32CheckSum::new();
+                encode_record(record, metadata, buffer, &checksum_calculator)?;
+                Ok(())
+            },
+        );
         let mut pager = ImdbInlineMetaDataPager::new(path).unwrap();
         let res = pager.load_specific_record_and_meta_data_using_id_offset(1);
         assert!(res.is_err());

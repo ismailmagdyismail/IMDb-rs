@@ -1,4 +1,9 @@
-use crate::core::record::imdb_record::{HEADER_SIZE, ImdbRecord, ImdbRecordMetaData};
+use crate::core::{
+    record::imdb_record::{ImdbRecord, ImdbRecordMetaData},
+    storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_storage_record::{
+        INLINE_STORAGE_RECORD_HEADER_SIZE, ImdbInlineMetaDataStorageRecord,
+    },
+};
 use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
@@ -12,13 +17,12 @@ pub fn create_kv_entry(iteration: usize) -> (String, String) {
     (expected_key, expected_val)
 }
 
-pub fn create_records(records_count: usize) -> Vec<(ImdbRecord, ImdbRecordMetaData)> {
+pub fn create_records(records_count: usize) -> Vec<ImdbInlineMetaDataStorageRecord> {
     let mut vec = Vec::new();
     for i in 0..records_count {
         let (key, val) = create_kv_entry(i);
 
-        let meta_data = ImdbRecordMetaData {
-            check_sum: 0,
+        let metadata = ImdbRecordMetaData {
             key_len: key.as_bytes().len() as u32,
             val_len: val.as_bytes().len() as u32,
         };
@@ -26,14 +30,18 @@ pub fn create_records(records_count: usize) -> Vec<(ImdbRecord, ImdbRecordMetaDa
             key: key.into_bytes(),
             value: val.into_bytes(),
         };
-        vec.push((record, meta_data));
+        vec.push(ImdbInlineMetaDataStorageRecord {
+            record,
+            metadata,
+            check_sum: 0,
+        });
     }
 
     return vec;
 }
 
 pub fn write_records<T>(
-    records: &Vec<(ImdbRecord, ImdbRecordMetaData)>,
+    records: &Vec<ImdbInlineMetaDataStorageRecord>,
     file_path: &Path,
     formatter_callback: &mut T,
 ) where
@@ -47,13 +55,20 @@ pub fn write_records<T>(
         .open(file_path)
         .unwrap();
     let mut buf_writer = BufWriter::new(file);
-    for (record, metadata) in records {
+    for storage_record in records {
         let mut buffer = Vec::new();
         buffer.resize(
-            HEADER_SIZE as usize + metadata.key_len as usize + metadata.val_len as usize,
+            INLINE_STORAGE_RECORD_HEADER_SIZE as usize
+                + storage_record.metadata.key_len as usize
+                + storage_record.metadata.val_len as usize,
             b'0',
         );
-        formatter_callback(&record, &metadata, buffer.as_mut_slice()).unwrap();
+        formatter_callback(
+            &storage_record.record,
+            &storage_record.metadata,
+            buffer.as_mut_slice(),
+        )
+        .unwrap();
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();
@@ -72,14 +87,21 @@ where
         .open(file_path)
         .unwrap();
     let mut buf_writer = BufWriter::new(file);
-    let records = create_records(records_count);
-    for (record, meta_data) in records {
+    let storage_records = create_records(records_count);
+    for storage_record in storage_records {
         let mut buffer = Vec::new();
         buffer.resize(
-            HEADER_SIZE as usize + meta_data.key_len as usize + meta_data.val_len as usize,
+            INLINE_STORAGE_RECORD_HEADER_SIZE as usize
+                + storage_record.metadata.key_len as usize
+                + storage_record.metadata.val_len as usize,
             b'0',
         );
-        formatter_callback(&record, &meta_data, buffer.as_mut_slice()).unwrap();
+        formatter_callback(
+            &storage_record.record,
+            &storage_record.metadata,
+            buffer.as_mut_slice(),
+        )
+        .unwrap();
         buf_writer.write_all(&buffer).unwrap();
     }
     buf_writer.flush().unwrap();
