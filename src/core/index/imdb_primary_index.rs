@@ -1,10 +1,7 @@
 use crate::core::{
     index::imdb_index::ImdbIndexWriter,
-    record::imdb_record::{ImdbRecord, ImdbRecordKey},
-    storage::{
-        imdb_storage_entries::{ImdbStorageReadEntry, Offset},
-        pager::ImdbRecordPager,
-    },
+    record::imdb_record::ImdbRecordKey,
+    storage::imdb_storage_entries::{ImdbStorageReadEntry, Offset},
 };
 use std::collections::HashMap;
 
@@ -31,25 +28,13 @@ impl ImdbPrimaryIndex {
     // use "read_record_offset" api for more granularity
     // callers may have result cached in some BufferPool so this couples index with disk access
     // up tp caller to coordinate that
-    pub fn read_record<T>(
-        &self,
-        key: &ImdbRecordKey,
-        pager: &mut T,
-    ) -> Result<Option<ImdbRecord>, String>
-    where
-        T: ImdbRecordPager,
-    {
-        let offset = match self.kv_offset_index.get(key) {
-            Some(offset) => offset,
-            None => return Result::Ok(Option::None),
-        };
-        let storage_record = pager.load_specific_record_and_meta_data_using_id_offset(*offset)?;
-        if let Option::Some(storage_record) = storage_record {
-            return Result::Ok(Option::Some(storage_record.record));
-        }
-        let fmt_error = format!("[Imdb Index Error]: record  found in index, not on Disk");
-        return Result::Err(fmt_error);
-    }
+    // pub fn read_record<T>(
+    //     &self,
+    //     key: &ImdbRecordKey,
+    //     pager: &mut T,
+    // ) -> Result<Option<ImdbRecord>, String>
+    // where
+    //     T: ImdbRecordPager
 
     pub fn write_record(&mut self, key: ImdbRecordKey, offset: Offset) {
         self.kv_offset_index.insert(key, offset);

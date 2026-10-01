@@ -1,9 +1,9 @@
-use crate::core::{
-    record::imdb_record::ImdbRecord, storage::imdb_storage_entries::ImdbStorageWriteEntry,
-};
+use crate::core::record::imdb_record::ImdbRecord;
 
 pub trait ImdbRecordWriter {
-    fn append_record(&mut self, record: &ImdbRecord) -> Result<ImdbStorageWriteEntry, String>;
+    type WriteStorageEntry;
+
+    fn append_record(&mut self, record: &ImdbRecord) -> Result<Self::WriteStorageEntry, String>;
 
     fn sync(&mut self) -> Result<(), String>;
 }

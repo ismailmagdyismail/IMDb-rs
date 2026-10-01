@@ -1,15 +1,10 @@
-use crate::core::record::imdb_record::{ImdbRecord, ImdbRecordMetaData};
+use crate::core::record::imdb_record::ImdbRecord;
 
 pub type Offset = u64;
 
 #[derive(Debug)]
 pub struct ImdbStorageReadEntry {
-    pub metadata: ImdbRecordMetaData,
     pub record: ImdbRecord,
-
-    // a bit of a leaky abstraction (exposing physical layout format) to return both to the caller
-    pub record_offset: Offset,
-    pub metadata_offset: Offset,
 
     // this comes back to the idea of [Handles vs Ptrs] and [Physical vs Logical] and like [Page ID , Slot-ID]
     // we will stick to indetfying offset instead of a generic id JUST for simplicity
@@ -34,8 +29,5 @@ pub struct ImdbStorageReadEntry {
 
 #[derive(Debug)]
 pub struct ImdbStorageWriteEntry {
-    // a bit of a leaky abstraction (exposing physical layout format) to return both to the caller
-    pub record_offset: Offset,
-    pub metadata_offset: Offset,
     pub identfying_offset: Offset,
 }

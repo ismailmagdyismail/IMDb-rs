@@ -17,11 +17,12 @@ use crate::core::{
             imdb_inline_metadata_format::{
                 decode_checksum, decode_metadata, decode_record_payload,
             },
+            imdb_inline_metadata_storage_entries::ImdbInlineMetaDataStorageReadEntry,
             imdb_inline_metadata_storage_record::{
                 CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
             },
         },
-        imdb_storage_entries::{ImdbStorageReadEntry, Offset},
+        imdb_storage_entries::Offset,
         pager::ImdbRecordPager,
     },
 };
@@ -69,7 +70,7 @@ impl ImdbInlineMetaDataPager {
 
     fn load_record(
         buf_reader: &mut BufReader<File>,
-    ) -> Result<Option<ImdbStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         // Fill the internal buffer of file reader
         // it may or may not be filled with enough data to decode the record
         // cursor / available bytes MUST be big enough to accomodate at least the Meta-Data
@@ -245,7 +246,7 @@ impl ImdbInlineMetaDataPager {
                 (record, record_size, record_offset)
             };
 
-        let storage_record = ImdbStorageReadEntry {
+        let storage_record = ImdbInlineMetaDataStorageReadEntry {
             record: decoded_record,
             record_offset,
             metadata: decoded_metadata,
@@ -257,14 +258,14 @@ impl ImdbInlineMetaDataPager {
 
     pub fn read_next_record_and_meta_data(
         &mut self,
-    ) -> Result<Option<ImdbStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         return ImdbInlineMetaDataPager::load_record(&mut self.buf_reader);
     }
 
     pub fn read_specific_record_and_meta_data(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbStorageReadEntry>, String> {
+    ) -> Result<Option<ImdbInlineMetaDataStorageReadEntry>, String> {
         // this random access always flushes internal buffer
         // so access using this method always involve fetching data from Os-Page-Cache | Disk if not cached
         self.random_access_buf_reader
@@ -277,20 +278,24 @@ impl ImdbInlineMetaDataPager {
 }
 
 impl ImdbRecordPager for ImdbInlineMetaDataPager {
-    fn load_next_record_and_metadata(&mut self) -> Result<Option<ImdbStorageReadEntry>, String> {
+    type ReadStorageEntryType = ImdbInlineMetaDataStorageReadEntry;
+
+    fn load_next_record_and_metadata(
+        &mut self,
+    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
         return self.read_next_record_and_meta_data();
     }
 
     fn load_specific_record_and_meta_data_using_id_offset(
         &mut self,
         offset: Offset,
-    ) -> Result<Option<ImdbStorageReadEntry>, String> {
+    ) -> Result<Option<Self::ReadStorageEntryType>, String> {
         return self.read_specific_record_and_meta_data(offset);
     }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {
-    type Item = Result<ImdbStorageReadEntry, String>;
+    type Item = Result<ImdbInlineMetaDataStorageReadEntry, String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read_next_record_and_meta_data() {
             Result::Ok(optional_record) => {
@@ -319,12 +324,12 @@ mod test {
             imdb_inline_metadata_storage_engine::{
                 imdb_inline_metadata_format::encode_record,
                 imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+                imdb_inline_metadata_storage_entries::ImdbInlineMetaDataStorageReadEntry,
                 imdb_inline_metadata_storage_record::{
                     CHECK_SUM_SIZE, INLINE_STORAGE_RECORD_HEADER_SIZE,
                     ImdbInlineMetaDataStorageRecord,
                 },
             },
-            imdb_storage_entries::ImdbStorageReadEntry,
             pager::ImdbRecordPager,
         },
     };
@@ -377,7 +382,7 @@ mod test {
     }
 
     pub fn verify_inline_metadata_fetched_storage_record_offsets(
-        fetched_storage_record: Option<ImdbStorageReadEntry>,
+        fetched_storage_record: Option<ImdbInlineMetaDataStorageReadEntry>,
         original_records: &Vec<ImdbInlineMetaDataStorageRecord>,
         record_to_verify_against_index: usize,
     ) {
