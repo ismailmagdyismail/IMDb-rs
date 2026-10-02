@@ -1,0 +1,3 @@
+//! Reusable disk-corruption helpers for `imdb` data files.
+
+pub use imdb as imdb_engine;

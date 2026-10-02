@@ -1,0 +1,16 @@
+[package]
+name = "disk-corruptor"
+version.workspace = true
+edition.workspace = true
+default-run = "corruptor"
+
+[dependencies]
+imdb = { path = "../.." }
+
+[lib]
+name = "disk_corruptor"
+path = "lib.rs"
+
+[[bin]]
+name = "corruptor"
+path = "bin/corruptor.rs"
