@@ -5,8 +5,8 @@ pub struct RecordViewerOperation {
 }
 
 impl RecordViewerOperation {
-    pub fn new(args: &Vec<String>) -> Result<Self, String> {
-        let mode = RecordViewerMode::parse(&args[2]);
+    pub fn new(args: &Vec<&str>) -> Result<Self, String> {
+        let mode = RecordViewerMode::parse(args[0]);
         if mode.is_none() {
             return Result::Err("error".to_string());
         }

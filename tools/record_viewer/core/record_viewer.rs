@@ -41,9 +41,7 @@ where
             }
             let record = record.unwrap();
             if record.is_none() {
-                self.pager.reset_cursor().unwrap_or_else(|err| {
-                    eprintln!("Error while resetting cursor: {:?}", err);
-                });
+                println!("No more records to display.");
                 break;
             }
             let record = record.unwrap();
@@ -61,10 +59,16 @@ where
                 println!("Record: {}", record.unwrap());
             } else {
                 println!("No more records to display.");
-                self.pager.reset_cursor().unwrap_or_else(|err| {
-                    eprintln!("Error while resetting cursor: {:?}", err);
-                });
             }
         }
+    }
+
+
+
+    pub fn reset_viewer_cursor(&mut self) {
+        println!("Resetting Cursor to the start.");
+        self.pager.reset_cursor().unwrap_or_else(|err| {
+            eprintln!("Error while resetting cursor: {:?}", err);
+        });
     }
 }

@@ -1,4 +1,3 @@
-
 pub enum RecordViewerMode {
     AllRecords,
     NextRecord,
@@ -6,8 +5,8 @@ pub enum RecordViewerMode {
 }
 
 impl RecordViewerMode {
-    pub fn parse(mode: &String) -> Option<Self> {
-        match mode.as_str() {
+    pub fn parse(mode: &str) -> Option<Self> {
+        match mode {
             "all" => Some(RecordViewerMode::AllRecords),
             "next" => Some(RecordViewerMode::NextRecord),
             "record_by_key" => Some(RecordViewerMode::RecordByKey),

@@ -6,9 +6,10 @@ impl Display for ImdbInlineMetaDataStorageReadEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ImdbInlineMetaDataStorageReadEntry {{ metadata: {:?}, record: {:?}, checksum: {}, checksum_offset: {}, metadata_offset: {}, record_offset: {}, identfying_offset: {} }}",
+            "ImdbInlineMetaDataStorageReadEntry {{ metadata: {:?}, record_key: {}, record_value: {}, checksum: {}, checksum_offset: {}, metadata_offset: {}, record_offset: {}, identfying_offset: {} }}",
             self.metadata,
-            self.record,
+            String::from_utf8_lossy(&self.record.key),
+            String::from_utf8_lossy(&self.record.value),
             self.checksum,
             self.checksum_offset,
             self.metadata_offset,
