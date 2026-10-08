@@ -13,4 +13,6 @@ pub trait ImdbRecordPager {
         &mut self,
         offset: Offset,
     ) -> Result<Option<Self::ReadStorageEntryType>, ImdbStorageError>;
+
+    fn reset_cursor(&mut self) -> Result<(), ImdbStorageError>;
 }

@@ -27,7 +27,7 @@ where
     pub fn execute(&mut self, operation: RecordViewerOperation) {
         match operation.viewer_mode {
             RecordViewerMode::AllRecords => self.view_all_records(),
-            RecordViewerMode::NextRecord => todo!("NextRecord is not yet supported"),
+            RecordViewerMode::NextRecord => self.view_next_record(),
             RecordViewerMode::RecordByKey => todo!("RecordByKey is not yet supported"),
         }
     }
@@ -41,10 +41,30 @@ where
             }
             let record = record.unwrap();
             if record.is_none() {
+                self.pager.reset_cursor().unwrap_or_else(|err| {
+                    eprintln!("Error while resetting cursor: {:?}", err);
+                });
                 break;
             }
             let record = record.unwrap();
-            eprintln!("Record: {}", record);
+            println!("Record: {}", record);
+        }
+    }
+
+    pub fn view_next_record(&mut self) {
+        let record = self.pager.load_next_record_and_metadata();
+        if record.is_err() {
+            eprintln!("Error while loading record: {:?}", record.err().unwrap());
+        } else {
+            let record = record.unwrap();
+            if record.is_some() {
+                println!("Record: {}", record.unwrap());
+            } else {
+                println!("No more records to display.");
+                self.pager.reset_cursor().unwrap_or_else(|err| {
+                    eprintln!("Error while resetting cursor: {:?}", err);
+                });
+            }
         }
     }
 }
