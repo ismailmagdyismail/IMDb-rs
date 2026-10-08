@@ -28,7 +28,7 @@ where
         match operation.viewer_mode {
             RecordViewerMode::AllRecords => self.view_all_records(),
             RecordViewerMode::NextRecord => self.view_next_record(),
-            RecordViewerMode::RecordByKey => todo!("RecordByKey is not yet supported"),
+            RecordViewerMode::ResetCursor => self.reset_viewer_cursor(),
         }
     }
 

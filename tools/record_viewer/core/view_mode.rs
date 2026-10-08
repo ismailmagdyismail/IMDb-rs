@@ -1,7 +1,8 @@
 pub enum RecordViewerMode {
     AllRecords,
     NextRecord,
-    RecordByKey,
+    // RecordByKey,
+    ResetCursor,
 }
 
 impl RecordViewerMode {
@@ -9,7 +10,8 @@ impl RecordViewerMode {
         match mode {
             "all" => Some(RecordViewerMode::AllRecords),
             "next" => Some(RecordViewerMode::NextRecord),
-            "record_by_key" => Some(RecordViewerMode::RecordByKey),
+            // "record_by_key" => Some(RecordViewerMode::RecordByKey),
+            "reset_cursor" => Some(RecordViewerMode::ResetCursor),
             _ => None,
         }
     }

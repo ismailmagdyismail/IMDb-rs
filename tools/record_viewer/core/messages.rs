@@ -9,8 +9,7 @@ pub const USAGE_MESSAGE: &'static str = "./record-viewer [Imdb_DB_DIR_PATH] [inl
     - View Options:
         * all: view all records in the db
         * next_record: view the next record in the db
-        * record_with_key: view the record with the specified key in the db
-            ** key: the key of the record to view (only required if record_with_key is specified)
+        * reset_cursor: reset viewer cursor to the first record, to be able to iterate over them again.
     ";
 
 pub fn format_error_message(error: &str) -> String {
