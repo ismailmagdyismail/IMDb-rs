@@ -1,11 +1,22 @@
-[package]
-name = "imdb"
+[workspace]
+members = [".", "tools/*", "tests"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-default-run="imdb"
+
+[workspace.dependencies]
+crc = "3.4.0"
+
+[package]
+name = "imdb"
+version.workspace = true
+edition.workspace = true
+default-run = "imdb"
 
 [dependencies]
-crc = "3.4.0"
+crc.workspace = true
 
 [[bin]]
 name = "exp"

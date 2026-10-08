@@ -1,0 +1,13 @@
+[package]
+name = "imdb-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+imdb = { path = ".." }
+disk-corruptor = { path = "../tools/disk_corruptor" }
+record-viewer = { path = "../tools/record_viewer" }
+
+[lib]
+path = "src/lib.rs"

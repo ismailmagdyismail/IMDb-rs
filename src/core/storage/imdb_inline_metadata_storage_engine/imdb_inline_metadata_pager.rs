@@ -308,6 +308,13 @@ impl ImdbRecordPager for ImdbInlineMetaDataPager {
     ) -> Result<Option<Self::ReadStorageEntryType>, ImdbStorageError> {
         return self.read_specific_record_and_meta_data(offset);
     }
+
+    fn reset_cursor(&mut self) -> Result<(), ImdbStorageError> {
+        self.buf_reader
+            .seek(SeekFrom::Start(0))
+            .map_err(|err| ImdbStorageError::DiskSeek("reset_cursor", err.to_string()))?;
+        Ok(())
+    }
 }
 
 impl Iterator for ImdbInlineMetaDataPager {

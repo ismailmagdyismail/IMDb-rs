@@ -1,0 +1,16 @@
+[package]
+name = "record-viewer"
+version.workspace = true
+edition.workspace = true
+default-run = "record-viewer"
+
+[dependencies]
+imdb = { path = "../.." }
+
+[lib]
+name = "record_viewer"
+path = "lib.rs"
+
+[[bin]]
+name = "record-viewer"
+path = "bin/record_viewer.rs"
