@@ -4,3 +4,4 @@ pub mod imdb_operation;
 pub mod imdb_config;
 pub mod imdb_errors;
 pub mod imdb_messages;
+pub mod imdb_format;

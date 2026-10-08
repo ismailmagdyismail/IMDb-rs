@@ -1,44 +1,40 @@
 use std::path::Path;
 
-use imdb::core::storage::imdb_inline_metadata_storage_engine::imdb_inline_metadata_pager::ImdbInlineMetaDataPager;
+use imdb::core::{
+    operations::imdb_format::ImdbFormat,
+    storage::{
+        imdb_inline_metadata_storage_engine::{
+            imdb_inline_metadata_disk_manager::IMDB_INLINE_METADATA_RECORDS_FILE_NAME,
+            imdb_inline_metadata_pager::ImdbInlineMetaDataPager,
+        },
+        imdb_storage_operations_status::ImdbOperationStatus,
+    },
+};
+use record_viewer::core::{record_viewer::RecordViewer, record_viewer_cli_args::parse_cli_args};
 
-const USAGE: &'static str = "record-viewer inline_metadata|seperate_metadata [Imdb_DB_DIR_PATH]";
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Invalid number of args");
-        eprintln!("{}", USAGE);
-        std::process::exit(1);
-    }
-    let db_format_type = &args[1];
-    let normalized_db_format_type = db_format_type.to_lowercase();
-    let normalized_db_format_type = normalized_db_format_type.trim();
-    match normalized_db_format_type {
-        "inline_metadata" => {
-            println!("inline_metadata");
-            if args.len() != 3 {
-                eprintln!("invalid inline metadata format args");
-                std::process::exit(1);
-            }
-            let db_path = Path::new(&args[2]);
-            println!("db dir {}", db_path.to_str().unwrap());
-            let mut data_file_path = db_path.to_path_buf();
-            data_file_path.push("imdb_inline_metadata.bin");
-            println!("file path {}", data_file_path.to_str().unwrap());
-            let pager = ImdbInlineMetaDataPager::new(Path::new(&data_file_path)).unwrap();
-            for entry in pager {
-                let storage_entry = entry.unwrap();
-                println!(
-                    "read entry with key {}, value {}",
-                    String::from_utf8(storage_entry.record.key).unwrap(),
-                    String::from_utf8(storage_entry.record.value).unwrap()
-                );
-            }
-        }
-        "seperate_metadata" => todo!("seperate_metadata is not yet supported"),
-        _ => {
-            eprintln!("unkown db file format!");
+    let (viewer_config, viewer_operation) = match parse_cli_args(&args) {
+        Ok((config, operation)) => (config, operation),
+        Err(e) => {
+            eprintln!("{}", e);
             std::process::exit(1);
         }
-    }
+    };
+
+    match viewer_config.imdb_format {
+        ImdbFormat::InlineMetadata => {
+            let data_file_path =
+                Path::new(&viewer_config.db_dir_path).join(IMDB_INLINE_METADATA_RECORDS_FILE_NAME);
+            let pager = ImdbInlineMetaDataPager::new(&data_file_path)
+                .map_err(|e| format!("Failed to create pager: {}", e.to_string()))
+                .unwrap_or_else(|err| {
+                    eprintln!("{}", err);
+                    std::process::exit(1);
+                });
+            let mut viewer = RecordViewer::new(pager);
+            viewer.execute(viewer_operation);
+        }
+        ImdbFormat::SeperateMetadata => todo!("seperate_metadata is not yet supported"),
+    };
 }
