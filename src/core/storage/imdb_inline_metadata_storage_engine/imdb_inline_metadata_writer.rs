@@ -129,9 +129,12 @@ mod test {
         let mut dir_path = dir_path.to_path_buf();
         dir_path.push(suffix);
         std::fs::create_dir_all(&dir_path).unwrap();
-        dir_path.add_extension(".bin");
-        let path: String = dir_path.to_str().to_owned().unwrap().to_string();
-        return path;
+        let file_name: String = format!("{}.bin", suffix);
+        dir_path.push(file_name);
+        let file_path = dir_path.to_str().unwrap();
+        let file_path = Path::new(&file_path);
+        let file_path = file_path.to_str().to_owned().unwrap().to_string();
+        return file_path;
     }
 
     #[test]

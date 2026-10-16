@@ -200,7 +200,6 @@ mod test {
             let crc_calc = Crc32CheckSum::new();
             encoded_records.push(encode_record(&record, &meta_data, buffer, &crc_calc));
             let encoded_checksum = crc_calc.calculate(&buffer[CHECK_SUM_SIZE as usize..]);
-            dbg!(encoded_checksum.to_le_bytes());
             let (decoded_checksum, _) = decode_checksum(buffer).unwrap();
             assert_eq!(encoded_checksum, decoded_checksum);
             records.push((meta_data, record));
